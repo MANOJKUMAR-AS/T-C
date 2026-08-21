@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+
+    "name": "T&C Analyzer",
+
+    "version": "1.0.0",
+
+    "description": "Analyze Terms & Conditions and Privacy Policies.",
+
+    "action": {
+        "default_popup": "popup.html"
+    },
+
+    "permissions": [
+        "activeTab",
+        "scripting"
+    ],
+
+    "host_permissions": [
+        "http://127.0.0.1:8000/*",
+        "http://localhost:8000/*"
+    ]
+}
