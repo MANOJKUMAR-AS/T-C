@@ -102,3 +102,4 @@ blob-report/
 *.tmp
 *.temp
 *.bak
+python_policy_test.txt

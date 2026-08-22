@@ -97,6 +97,7 @@ HEADERS = {
         "Chrome/120.0.0.0 "
         "Safari/537.36"
     ),
+
     "Accept": (
         "text/html,"
         "application/xhtml+xml,"
@@ -105,7 +106,11 @@ HEADERS = {
         "image/webp,"
         "*/*;q=0.8"
     ),
+
     "Accept-Language": "en-US,en;q=0.9",
+
+    # Prevent zstd compression problems.
+    "Accept-Encoding": "identity",
 }
 
 
@@ -272,7 +277,6 @@ def add_policy_link(
 
     normalized = normalize_url(url)
 
-    # Check whether this URL already exists.
     for existing in policy_links:
 
         existing_normalized = normalize_url(
@@ -347,7 +351,6 @@ def find_policy_links(url):
                 strip=True
             )
 
-            # Convert relative URL to absolute URL.
             full_url = urljoin(
                 response.url,
                 href
@@ -357,7 +360,7 @@ def find_policy_links(url):
                 full_url
             )
 
-            # Only HTTP / HTTPS
+            # Only HTTP / HTTPS.
             if parsed.scheme not in (
                 "http",
                 "https",
@@ -365,22 +368,22 @@ def find_policy_links(url):
                 continue
 
             # Only same website.
-            #
-            # Note:
-            # www.example.com and example.com
-            # are treated as the same domain.
             if not is_same_domain(
                 response.url,
                 full_url
             ):
                 continue
 
-            # Search both the visible link text
-            # and the href.
+            # Search visible text + href.
             search_text = (
                 f"{link_text} "
                 f"{href}"
             ).lower()
+
+            # "Cookie Preferences" is a settings link,
+            # not a Cookie Policy page.
+            if "cookie preferences" in search_text:
+                continue
 
             policy_type = classify_policy(
                 search_text
@@ -445,7 +448,11 @@ def find_policy_links(url):
                 if response.status_code != 200:
                     continue
 
-                # Get page text.
+                # Some websites return HTTP 200
+                # for custom NotFound pages.
+                if "/NotFound" in response.url:
+                    continue
+
                 soup = BeautifulSoup(
                     response.text,
                     "html.parser"
@@ -456,19 +463,15 @@ def find_policy_links(url):
                     strip=True
                 )
 
-                # Look at the URL + page text.
-                detection_text = (
-                    f"{candidate_url} "
-                    f"{page_text[:10000]}"
-                )
+                # IMPORTANT:
+                # Classify based on actual page content,
+                # not merely the candidate URL.
+                detection_text = page_text[:10000]
 
                 detected_type = classify_policy(
                     detection_text
                 )
 
-                # We specifically tried this category,
-                # so accept the page only when the
-                # content actually looks like a policy.
                 if detected_type:
 
                     add_policy_link(

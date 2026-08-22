@@ -859,3 +859,210 @@ button {
 
     font-size: 8px;
 }
+/* ============================================================
+   AGENT 2 ANALYSIS
+   ============================================================ */
+
+.risk-card {
+    margin-top: 12px;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #d9d9d9;
+    background: #f7f7f7;
+}
+
+.risk-card > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.risk-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #777;
+}
+
+#overallRiskValue {
+    font-size: 18px;
+    letter-spacing: 0.04em;
+}
+
+.risk-low {
+    border-color: #b7dfc0;
+    background: #f1faf3;
+}
+
+.risk-medium {
+    border-color: #ead39a;
+    background: #fffaf0;
+}
+
+.risk-high {
+    border-color: #e5b0a8;
+    background: #fff5f3;
+}
+
+.risk-critical {
+    border-color: #d58d8d;
+    background: #fff0f0;
+}
+
+.analysis-block {
+    margin-top: 16px;
+}
+
+.analysis-block h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+}
+
+.finding-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.finding-list li {
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+
+/* ============================================================
+   CLAUSES
+   ============================================================ */
+
+.clauses {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.clause-card {
+    padding: 14px;
+    border: 1px solid #dedede;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+.clause-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.clause-id {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.clause-card h4 {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.3;
+}
+
+.risk-badge {
+    flex-shrink: 0;
+    padding: 4px 7px;
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 800;
+}
+
+.risk-badge.risk-low {
+    color: #23753a;
+    background: #e4f5e8;
+}
+
+.risk-badge.risk-medium {
+    color: #8a6200;
+    background: #fff0c7;
+}
+
+.risk-badge.risk-high {
+    color: #a33a2f;
+    background: #fde2de;
+}
+
+.risk-badge.risk-critical {
+    color: #ffffff;
+    background: #9b2020;
+}
+
+.clause-category {
+    display: inline-block;
+    margin-top: 9px;
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: #f0f0f0;
+    color: #666;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.clause-summary {
+    margin: 10px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.clause-explanation,
+.clause-risk-reason {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #eeeeee;
+}
+
+.clause-explanation strong,
+.clause-risk-reason strong,
+.clause-list strong {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #777;
+}
+
+.clause-explanation p,
+.clause-risk-reason p {
+    margin: 5px 0 0;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.clause-card details {
+    margin-top: 12px;
+    border-top: 1px solid #eeeeee;
+    padding-top: 10px;
+}
+
+.clause-card summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.clause-list {
+    margin-top: 12px;
+}
+
+.clause-list ul {
+    margin: 5px 0 0;
+    padding-left: 18px;
+}
+
+.clause-list li {
+    margin-bottom: 5px;
+    font-size: 11px;
+    line-height: 1.4;
+}

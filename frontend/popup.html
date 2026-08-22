@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -15,276 +16,468 @@
         rel="stylesheet"
         href="popup.css"
     >
+
 </head>
+
 
 <body>
 
-    <div class="app">
+<div class="app">
 
-        <!-- ================================================= -->
-        <!-- HEADER -->
-        <!-- ================================================= -->
 
-        <header class="header">
+    <!-- ===================================================== -->
+    <!-- HEADER -->
+    <!-- ===================================================== -->
 
-            <div class="brand">
+    <header class="header">
 
-                <div class="brand-icon">
+        <div class="brand">
+
+            <div class="brand-icon">
+                T
+            </div>
+
+            <div>
+
+                <h1>
+                    T&C Analyzer
+                </h1>
+
+                <p>
+                    Understand before you agree
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div
+            id="connectionStatus"
+            class="connection-status checking"
+        >
+
+            <span class="status-dot"></span>
+
+            Connecting
+
+        </div>
+
+    </header>
+
+
+
+    <!-- ===================================================== -->
+    <!-- CURRENT PAGE -->
+    <!-- ===================================================== -->
+
+    <section class="page-section">
+
+        <div class="section-label">
+            CURRENT PAGE
+        </div>
+
+
+        <div class="page-card">
+
+            <div class="page-icon">
+                ◉
+            </div>
+
+
+            <div class="page-info">
+
+                <h2 id="pageTitle">
+                    Detecting page...
+                </h2>
+
+
+                <p
+                    id="pageUrl"
+                    class="page-url"
+                >
+                    Loading...
+                </p>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- ===================================================== -->
+    <!-- AGENT 1 -->
+    <!-- ===================================================== -->
+
+    <section class="agent-card">
+
+        <div class="agent-header">
+
+            <div>
+
+                <span class="section-label">
+                    AGENT 1
+                </span>
+
+                <h2>
+                    Policy Extraction
+                </h2>
+
+            </div>
+
+
+            <div
+                id="agentBadge"
+                class="agent-badge waiting"
+            >
+                WAITING
+            </div>
+
+        </div>
+
+
+
+        <div class="agent-main">
+
+            <div class="policy-number">
+
+                <span
+                    id="policyCount"
+                    class="number"
+                >
+                    -
+                </span>
+
+
+                <span class="number-label">
+                    policies found
+                </span>
+
+            </div>
+
+
+            <div
+                id="agentMessage"
+                class="agent-message"
+            >
+                Agent 1 is waiting to analyze
+                the current page.
+            </div>
+
+        </div>
+
+
+
+        <div class="agent-progress">
+
+            <div
+                id="progressBar"
+                class="progress-bar"
+            ></div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- ===================================================== -->
+    <!-- POLICY DISCOVERY -->
+    <!-- ===================================================== -->
+
+    <section class="section">
+
+        <div class="section-title-row">
+
+            <h2>
+                Policy Discovery
+            </h2>
+
+
+            <span
+                id="discoveryStatus"
+                class="muted"
+            >
+                Waiting
+            </span>
+
+        </div>
+
+
+
+        <div class="policy-grid">
+
+
+            <!-- TERMS -->
+
+            <div
+                id="termsCard"
+                class="policy-type-card"
+            >
+
+                <div class="policy-type-icon">
                     T
                 </div>
 
-                <div>
-                    <h1>T&C Analyzer</h1>
 
-                    <p>
-                        Understand before you agree
-                    </p>
+                <div class="policy-type-info">
+
+                    <span>
+                        Terms
+                    </span>
+
+
+                    <strong id="termsCount">
+                        0
+                    </strong>
+
                 </div>
 
             </div>
 
+
+
+            <!-- PRIVACY -->
+
             <div
-                id="connectionStatus"
-                class="connection-status checking"
+                id="privacyCard"
+                class="policy-type-card"
             >
-                <span class="status-dot"></span>
-                Connecting
-            </div>
 
-        </header>
-
-
-        <!-- ================================================= -->
-        <!-- CURRENT PAGE -->
-        <!-- ================================================= -->
-
-        <section class="page-section">
-
-            <div class="section-label">
-                CURRENT PAGE
-            </div>
-
-            <div class="page-card">
-
-                <div class="page-icon">
-                    ◉
+                <div class="policy-type-icon">
+                    P
                 </div>
 
-                <div class="page-info">
 
-                    <h2 id="pageTitle">
-                        Detecting page...
-                    </h2>
+                <div class="policy-type-info">
 
-                    <p
-                        id="pageUrl"
-                        class="page-url"
-                    >
-                        Loading...
-                    </p>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================================================= -->
-        <!-- AGENT 1 STATUS -->
-        <!-- ================================================= -->
-
-        <section class="agent-card">
-
-            <div class="agent-header">
-
-                <div>
-
-                    <span class="section-label">
-                        AGENT 1
+                    <span>
+                        Privacy
                     </span>
 
-                    <h2>
-                        Policy Extraction
-                    </h2>
+
+                    <strong id="privacyCount">
+                        0
+                    </strong>
 
                 </div>
 
-                <div
-                    id="agentBadge"
-                    class="agent-badge waiting"
+            </div>
+
+
+
+            <!-- COOKIES -->
+
+            <div
+                id="cookiesCard"
+                class="policy-type-card"
+            >
+
+                <div class="policy-type-icon">
+                    C
+                </div>
+
+
+                <div class="policy-type-info">
+
+                    <span>
+                        Cookies
+                    </span>
+
+
+                    <strong id="cookiesCount">
+                        0
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- ===================================================== -->
+    <!-- AGENT 1 RESULTS -->
+    <!-- ===================================================== -->
+
+    <section class="section">
+
+        <div class="section-title-row">
+
+            <h2>
+                Agent 1 Results
+            </h2>
+
+
+            <span
+                id="resultCount"
+                class="muted"
+            >
+                0 results
+            </span>
+
+        </div>
+
+
+
+        <div
+            id="results"
+            class="results"
+        >
+
+            <div class="empty-state">
+
+                <div class="empty-icon">
+                    ◌
+                </div>
+
+
+                <h3>
+                    No analysis yet
+                </h3>
+
+
+                <p>
+                    Run the analysis to discover
+                    policy pages on this website.
+                </p>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- ===================================================== -->
+    <!-- AGENT 2 -->
+    <!-- ===================================================== -->
+
+    <section class="section agent2-section">
+
+
+        <!-- AGENT 2 HEADER -->
+
+        <div class="section-title-row">
+
+            <div>
+
+                <span class="section-label">
+                    AGENT 2
+                </span>
+
+
+                <h2>
+                    Clause Analysis
+                </h2>
+
+            </div>
+
+
+            <span
+                id="agent2Status"
+                class="muted"
+            >
+                Waiting
+            </span>
+
+        </div>
+
+
+
+        <!-- ================================================= -->
+        <!-- DOCUMENT RISK -->
+        <!-- ================================================= -->
+
+        <div
+            id="overallRisk"
+            class="risk-card"
+        >
+
+            <div class="risk-content">
+
+                <span class="risk-label">
+                    OVERALL RISK
+                </span>
+
+
+                <strong
+                    id="overallRiskValue"
+                    class="risk-value"
                 >
-                    WAITING
-                </div>
+                    -
+                </strong>
 
             </div>
 
+        </div>
 
-            <div class="agent-main">
-
-                <div class="policy-number">
-
-                    <span
-                        id="policyCount"
-                        class="number"
-                    >
-                        -
-                    </span>
-
-                    <span class="number-label">
-                        policies found
-                    </span>
-
-                </div>
-
-                <div
-                    id="agentMessage"
-                    class="agent-message"
-                >
-                    Agent 1 is waiting to analyze
-                    the current page.
-                </div>
-
-            </div>
-
-
-            <div class="agent-progress">
-
-                <div
-                    id="progressBar"
-                    class="progress-bar"
-                ></div>
-
-            </div>
-
-        </section>
 
 
         <!-- ================================================= -->
-        <!-- POLICY TYPES -->
+        <!-- KEY FINDINGS -->
         <!-- ================================================= -->
 
-        <section class="section">
+        <div class="analysis-block">
+
+            <div class="analysis-block-header">
+
+                <h3>
+                    Key Findings
+                </h3>
+
+            </div>
+
+
+            <ul
+                id="keyFindings"
+                class="finding-list"
+            >
+
+                <li>
+                    Waiting for Agent 2 analysis...
+                </li>
+
+            </ul>
+
+        </div>
+
+
+
+        <!-- ================================================= -->
+        <!-- CLAUSES -->
+        <!-- ================================================= -->
+
+        <div class="analysis-block">
+
 
             <div class="section-title-row">
 
-                <h2>
-                    Policy Discovery
-                </h2>
+                <h3>
+                    Clauses
+                </h3>
+
 
                 <span
-                    id="discoveryStatus"
+                    id="clauseCount"
                     class="muted"
                 >
-                    Waiting
+                    0
                 </span>
 
             </div>
 
-
-            <div class="policy-grid">
-
-                <div
-                    id="termsCard"
-                    class="policy-type-card"
-                >
-
-                    <div class="policy-type-icon">
-                        T
-                    </div>
-
-                    <div class="policy-type-info">
-
-                        <span>
-                            Terms
-                        </span>
-
-                        <strong id="termsCount">
-                            0
-                        </strong>
-
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="privacyCard"
-                    class="policy-type-card"
-                >
-
-                    <div class="policy-type-icon">
-                        P
-                    </div>
-
-                    <div class="policy-type-info">
-
-                        <span>
-                            Privacy
-                        </span>
-
-                        <strong id="privacyCount">
-                            0
-                        </strong>
-
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="cookiesCard"
-                    class="policy-type-card"
-                >
-
-                    <div class="policy-type-icon">
-                        C
-                    </div>
-
-                    <div class="policy-type-info">
-
-                        <span>
-                            Cookies
-                        </span>
-
-                        <strong id="cookiesCount">
-                            0
-                        </strong>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================================================= -->
-        <!-- RESULTS -->
-        <!-- ================================================= -->
-
-        <section class="section">
-
-            <div class="section-title-row">
-
-                <h2>
-                    Agent 1 Results
-                </h2>
-
-                <span
-                    id="resultCount"
-                    class="muted"
-                >
-                    0 results
-                </span>
-
-            </div>
 
 
             <div
-                id="results"
-                class="results"
+                id="clauses"
+                class="clauses"
             >
 
                 <div class="empty-state">
@@ -293,65 +486,84 @@
                         ◌
                     </div>
 
+
                     <h3>
-                        No analysis yet
+                        No clause analysis yet
                     </h3>
 
+
                     <p>
-                        Run Agent 1 to discover
-                        policy pages on this website.
+                        Agent 2 results will appear
+                        here after policy extraction.
                     </p>
 
                 </div>
 
             </div>
 
-        </section>
-
-
-        <!-- ================================================= -->
-        <!-- ACTIONS -->
-        <!-- ================================================= -->
-
-        <div class="actions">
-
-            <button
-                id="analyze"
-                class="primary-button"
-            >
-                Run Agent 1
-            </button>
-
-            <button
-                id="reanalyze"
-                class="secondary-button"
-            >
-                Re-analyze
-            </button>
-
         </div>
 
+    </section>
 
-        <!-- ================================================= -->
-        <!-- FOOTER -->
-        <!-- ================================================= -->
 
-        <footer class="footer">
 
-            <span>
-                Agent 1 · Policy Extraction
-            </span>
+    <!-- ===================================================== -->
+    <!-- ACTIONS -->
+    <!-- ===================================================== -->
 
-            <span>
-                Local backend
-            </span>
+    <div class="actions">
 
-        </footer>
+        <button
+            id="analyze"
+            class="primary-button"
+        >
+            Run Analysis
+        </button>
+
+
+        <button
+            id="reanalyze"
+            class="secondary-button"
+        >
+            Re-analyze
+        </button>
 
     </div>
 
 
-    <script src="popup.js"></script>
+
+    <!-- ===================================================== -->
+    <!-- FOOTER -->
+    <!-- ===================================================== -->
+
+    <footer class="footer">
+
+        <span>
+            Agent 1 · Policy Extraction
+        </span>
+
+
+        <span>
+            Agent 2 · Clause Analysis
+        </span>
+
+
+        <span>
+            Local backend
+        </span>
+
+    </footer>
+
+
+</div>
+
+
+
+<!-- ========================================================= -->
+<!-- JAVASCRIPT -->
+<!-- ========================================================= -->
+
+<script src="popup.js"></script>
 
 </body>
 

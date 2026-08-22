@@ -1,5 +1,4 @@
-from agents.policy_extraction import PolicyExtractionAgent
-
+from agents.agents1.policy_extraction import PolicyExtractionAgent
 
 agent = PolicyExtractionAgent()
 
