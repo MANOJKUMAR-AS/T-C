@@ -1,0 +1,29 @@
+
+{
+  "manifest_version": 3,
+  "name": "T&C Analyzer",
+  "version": "10.0.0",
+  "description": "Browser-first Terms, Privacy, Cookie and Legal policy analyzer.",
+  "permissions": [
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1:8001/*",
+    "http://localhost:8001/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

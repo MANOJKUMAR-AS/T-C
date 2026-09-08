@@ -1,0 +1,82 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>T&C Analyzer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <main class="app">
+        <header>
+            <div>
+                <h1>T&C Analyzer</h1>
+                <p id="pageTitle">Current webpage</p>
+            </div>
+            <span id="connectionStatus" class="status">Checking...</span>
+        </header>
+
+        <section class="hero">
+            <div>
+                <span class="eyebrow">AGENT 1</span>
+                <h2>Policy Discovery</h2>
+            </div>
+            <span id="agent1Status" class="status">Waiting</span>
+        </section>
+
+        <div class="categories">
+            <div><b>T</b><span>Terms</span><strong id="termsCount">0</strong></div>
+            <div><b>P</b><span>Privacy</span><strong id="privacyCount">0</strong></div>
+            <div><b>C</b><span>Cookies</span><strong id="cookiesCount">0</strong></div>
+            <div><b>L</b><span>Legal</span><strong id="legalCount">0</strong></div>
+        </div>
+
+        <section>
+            <div class="section-head">
+                <h2>Agent 1 Results</h2>
+                <span id="policyCount">0 results</span>
+            </div>
+            <div id="policies"></div>
+        </section>
+
+        <section>
+            <div class="hero">
+                <div>
+                    <span class="eyebrow">AGENT 2</span>
+                    <h2>Clause Analysis</h2>
+                </div>
+                <span id="agent2Status" class="status">Waiting</span>
+            </div>
+
+            <div class="risk-box">
+                <span>OVERALL RISK</span>
+                <strong id="overallRisk">UNAVAILABLE</strong>
+            </div>
+
+            <h2>Key Findings</h2>
+            <ul id="keyFindings">
+                <li>Agent 2 will start after Agent 1 completes.</li>
+            </ul>
+
+            <div class="section-head">
+                <h2>Clauses</h2>
+                <span id="clauseCount">0</span>
+            </div>
+            <div id="clauses"></div>
+        </section>
+
+        <div class="actions">
+            <button id="analyze">Run Analysis</button>
+            <button id="reanalyze">Run Again</button>
+        </div>
+
+        <footer>
+            <span>Agent 1 · Browser extraction</span>
+            <span>Agent 2 · Clause analysis</span>
+            <span>Local backend</span>
+        </footer>
+    </main>
+    <script src="popup.js"></script>
+</body>
+</html>
