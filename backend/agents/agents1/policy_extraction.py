@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import re
@@ -19,6 +19,14 @@ except ImportError:
 
     def firecrawl_is_configured() -> bool:
         return False
+
+
+try:
+    from scraping.web_search_fallback import (
+        search_policy_documents,
+    )
+except ImportError:
+    search_policy_documents = None
 
 
 class PolicyExtractionAgent:
@@ -452,7 +460,221 @@ class PolicyExtractionAgent:
                 )
 
         # ========================================================
-        # 6. FINAL DEDUPLICATION
+        # 6. WEB SEARCH FALLBACK
+        #
+        # Final fallback after browser/backend extraction and
+        # Firecrawl have failed to produce usable documents.
+        # ========================================================
+
+        if (
+            not documents
+            and search_policy_documents
+        ):
+
+            print()
+            print("=" * 70)
+            print("WEB SEARCH FALLBACK ACTIVATED")
+            print("=" * 70)
+
+            try:
+
+                search_docs = search_policy_documents(
+                    source_url,
+                    max_documents=self.MAX_DOCUMENTS,
+                )
+
+                if isinstance(
+                    search_docs,
+                    list,
+                ):
+
+                    for item in search_docs:
+
+                        if (
+                            len(documents)
+                            >= self.MAX_DOCUMENTS
+                        ):
+                            break
+
+                        if not isinstance(
+                            item,
+                            dict,
+                        ):
+                            continue
+
+                        search_url = str(
+                            item.get(
+                                "url",
+                                "",
+                            )
+                            or ""
+                        ).strip()
+
+                        search_type = (
+                            self._normalize_type(
+                                item.get(
+                                    "type",
+                                    "other",
+                                )
+                            )
+                        )
+
+                        search_content = str(
+                            item.get(
+                                "content",
+                                "",
+                            )
+                            or ""
+                        ).strip()
+
+                        if not search_url:
+                            continue
+
+                        # ------------------------------------------------
+                        # Same-site protection.
+                        # ------------------------------------------------
+
+                        source_host = (
+                            urlparse(
+                                source_url
+                            ).hostname
+                            or ""
+                        ).lower()
+
+                        result_host = (
+                            urlparse(
+                                search_url
+                            ).hostname
+                            or ""
+                        ).lower()
+
+                        source_host = source_host.removeprefix(
+                            "www."
+                        )
+
+                        result_host = result_host.removeprefix(
+                            "www."
+                        )
+
+                        if not (
+                            result_host == source_host
+                            or result_host.endswith(
+                                "." + source_host
+                            )
+                        ):
+                            print(
+                                "Web search result rejected "
+                                "because it is external: "
+                                f"{search_url}"
+                            )
+                            continue
+
+                        candidate = {
+                            "url": search_url,
+                            "type": search_type,
+                            "content": search_content,
+                            "title": item.get(
+                                "title",
+                                "",
+                            ),
+                            "source": "web_search",
+                        }
+
+                        # ------------------------------------------------
+                        # Re-run the normal policy URL gate.
+                        # ------------------------------------------------
+
+                        if not self._is_policy_candidate(
+                            candidate
+                        ):
+                            print(
+                                "Web search candidate rejected "
+                                "by policy URL gate: "
+                                f"{search_url}"
+                            )
+                            continue
+
+                        # ------------------------------------------------
+                        # Search evidence must still contain enough
+                        # policy text to be useful to Agent 2.
+                        # ------------------------------------------------
+
+                        if (
+                            len(search_content)
+                            < self.MIN_POLICY_CHARS
+                        ):
+                            print(
+                                "Web search evidence too short: "
+                                f"{search_url}"
+                            )
+                            continue
+
+                        if not self._is_real_policy_content(
+                            search_url,
+                            search_content,
+                            search_type,
+                        ):
+                            print(
+                                "Web search evidence rejected "
+                                "by policy content validation: "
+                                f"{search_url}"
+                            )
+                            continue
+
+                        document = self._build_document(
+                            search_url,
+                            search_type,
+                            search_content,
+                            "web_search",
+                        )
+
+                        if document:
+
+                            document[
+                                "complete_page_extracted"
+                            ] = False
+
+                            document[
+                                "search_query"
+                            ] = item.get(
+                                "search_query",
+                                "",
+                            )
+
+                            document[
+                                "search_title"
+                            ] = item.get(
+                                "search_title",
+                                "",
+                            )
+
+                            document[
+                                "search_snippet"
+                            ] = item.get(
+                                "search_snippet",
+                                "",
+                            )
+
+                            documents.append(
+                                document
+                            )
+
+                            print(
+                                "Web search evidence accepted: "
+                                f"[{search_type}] "
+                                f"{search_url} "
+                                f"-> "
+                                f"{len(search_content)} chars"
+                            )
+
+            except Exception as exc:
+
+                print(
+                    f"Web search fallback failed: {exc}"
+                )
+
+        # ========================================================
+        # 7. FINAL DEDUPLICATION
         # ========================================================
 
         documents = self._deduplicate_documents(
@@ -460,7 +682,7 @@ class PolicyExtractionAgent:
         )
 
         # ========================================================
-        # 7. SUMMARY
+        # 8. SUMMARY
         # ========================================================
 
         summary = {
@@ -494,7 +716,7 @@ class PolicyExtractionAgent:
         result["summary"] = summary
 
         # ========================================================
-        # 8. FINAL LOG
+        # 9. FINAL LOG
         # ========================================================
 
         print()
@@ -739,6 +961,36 @@ class PolicyExtractionAgent:
             path,
         )
 
+        # --------------------------------------------------------
+        # Generic policy routes.
+        #
+        # Some sites use /policy or application-specific routes
+        # without putting "privacy" or "terms" in the URL.
+        # --------------------------------------------------------
+
+        if compact in {
+            "policy",
+            "privacypolicyapp",
+        }:
+            return "privacy"
+
+        if compact in {
+            "policyapp",
+            "apptermsconditions",
+            "appapipagesterms",
+        }:
+            return "terms"
+
+        if compact.endswith(
+            "cancellationpolicylp"
+        ):
+            return "returns"
+
+        if compact.endswith(
+            "shippingpolicyapp"
+        ):
+            return "legal"
+
         if (
             "privacy" in compact
             or "dataprotection" in compact
@@ -833,6 +1085,14 @@ class PolicyExtractionAgent:
             "cookies",
             "terms",
             "termsofuse",
+
+            # Generic policy routes.
+            "policy",
+            "policy-app",
+            "app-terms-conditions",
+            "app-api/index.php/pages/terms",
+            "cancellation-policy",
+            "shipping-policy",
             "termsofservice",
             "termsandconditions",
             "legal",
@@ -1491,3 +1751,4 @@ class PolicyExtractionAgent:
         except Exception:
 
             return ""
+

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // T&C ANALYZER
 // BACKGROUND SERVICE WORKER
 //
@@ -21,9 +21,17 @@
 const CONFIG = {
     MAX_POLICY_TABS: 20,
 
+    WEB_SEARCH_ENABLED: true,
+
+    WEB_SEARCH_TIMEOUT: 12000,
+
+    WEB_SEARCH_RESULTS_PER_QUERY: 10,
+
+    WEB_SEARCH_MAX_QUERIES: 12,
+
     LOAD_TIMEOUT: 10000,
 
-    ROUTE_PROBE_TIMEOUT: 8000,
+    ROUTE_PROBE_TIMEOUT: 10000,
 
     PROBE_CONCURRENCY: 3,
 
@@ -49,15 +57,9 @@ function classifyPolicyUrl(url) {
     try {
         const parsed = new URL(url);
 
-        // CRITICAL:
+        // IMPORTANT:
         // Only inspect pathname.
-        //
-        // Do NOT inspect search/query parameters.
-        //
-        // Example:
-        // /s/min35percentoff?...sale...
-        //
-        // must NOT become a promotion policy.
+        // Query parameters must never determine policy type.
         const path = parsed.pathname
             .toLowerCase()
             .replace(/\/+/g, "/");
@@ -85,7 +87,13 @@ function classifyPolicyUrl(url) {
             /^\/campaign(?:\/|$)/,
             /^\/campaigns(?:\/|$)/,
             /^\/catalog(?:\/|$)/,
-            /^\/catalogue(?:\/|$)/
+            /^\/catalogue(?:\/|$)/,
+            /^\/beauty(?:\/|$)/,
+            /^\/skin(?:\/|$)/,
+            /^\/makeup(?:\/|$)/,
+            /^\/hair(?:\/|$)/,
+            /^\/bath(?:\/|$)/,
+            /^\/body(?:\/|$)/
         ];
 
         if (
@@ -100,9 +108,7 @@ function classifyPolicyUrl(url) {
         // Privacy
         // ----------------------------------------------------
 
-        if (
-            /privacy/.test(path)
-        ) {
+        if (/privacy/.test(path)) {
             return "privacy";
         }
 
@@ -125,9 +131,7 @@ function classifyPolicyUrl(url) {
         // Cookies
         // ----------------------------------------------------
 
-        if (
-            /cookies?/.test(path)
-        ) {
+        if (/cookies?/.test(path)) {
             return "cookies";
         }
 
@@ -159,18 +163,6 @@ function classifyPolicyUrl(url) {
 
         // ----------------------------------------------------
         // Promotions
-        //
-        // IMPORTANT:
-        // Only policy-like paths qualify.
-        //
-        // /sale-policy
-        // /promotion-policy
-        //
-        // qualifies.
-        //
-        // /s/min35percentoff
-        //
-        // does not.
         // ----------------------------------------------------
 
         if (
@@ -215,11 +207,9 @@ function normalizeUrl(url, baseUrl = null) {
     }
 
     try {
-        const base = baseUrl || undefined;
-
         const absolute = new URL(
             url,
-            base
+            baseUrl || undefined
         );
 
         if (
@@ -267,17 +257,15 @@ function isBadUrl(url) {
     try {
         const parsed = new URL(url);
 
-        const protocol = parsed.protocol.toLowerCase();
-
         if (
-            protocol !== "http:" &&
-            protocol !== "https:"
+            parsed.protocol !== "http:" &&
+            parsed.protocol !== "https:"
         ) {
             return true;
         }
 
-        // Only inspect pathname for file/path exclusions.
-        const path = parsed.pathname.toLowerCase();
+        const path =
+            parsed.pathname.toLowerCase();
 
         const badPathPatterns = [
             /\.jpg$/,
@@ -299,7 +287,7 @@ function isBadUrl(url) {
             /^\/cart(?:\/|$)/,
             /^\/checkout(?:\/|$)/,
             /^\/account(?:\/|$)/,
-            /^\/profile(?:\/$|\/)/,
+            /^\/profile(?:\/|$)/,
             /^\/wishlist(?:\/|$)/
         ];
 
@@ -349,12 +337,6 @@ function isSubstantiveDocument(
         return false;
     }
 
-    // --------------------------------------------------------
-    // If a URL is available, it MUST look like a policy URL.
-    //
-    // This is the important false-positive protection.
-    // --------------------------------------------------------
-
     if (url) {
         const detectedType =
             classifyPolicyUrl(url);
@@ -363,8 +345,6 @@ function isSubstantiveDocument(
             return false;
         }
 
-        // If we know the expected type, don't accept a
-        // completely unrelated policy type.
         if (
             expectedType &&
             detectedType !== expectedType
@@ -373,39 +353,44 @@ function isSubstantiveDocument(
         }
     }
 
-    const lower = cleaned.toLowerCase();
+    const lower =
+        cleaned.toLowerCase();
 
     // --------------------------------------------------------
-    // Homepage / shopping shell detection
+    // Shopping shell detection
     // --------------------------------------------------------
 
-    const homepageSignals = [
+    const shoppingSignals = [
         "shop now",
         "add to cart",
+        "add to bag",
         "buy now",
         "new arrivals",
         "best sellers",
         "shopping bag",
-        "my account"
+        "my account",
+        "sort by popularity",
+        "all products",
+        "regular price"
     ];
 
-    let homepageSignalCount = 0;
+    let shoppingSignalCount = 0;
 
     for (
-        const signal of homepageSignals
+        const signal of shoppingSignals
     ) {
         if (
             lower.includes(signal)
         ) {
-            homepageSignalCount++;
+            shoppingSignalCount++;
         }
     }
 
-    // A short page with many shopping signals is almost
-    // certainly a storefront page, not a legal document.
+    // A short page containing several storefront signals
+    // is not treated as a policy document.
     if (
-        cleaned.length < 3000 &&
-        homepageSignalCount >= 4
+        cleaned.length < 5000 &&
+        shoppingSignalCount >= 3
     ) {
         return false;
     }
@@ -436,41 +421,38 @@ function normalizeDocument(
         document.href ||
         fallbackUrl;
 
-    const url = normalizeUrl(
-        rawUrl,
-        fallbackUrl
-    );
+    const url =
+        normalizeUrl(
+            rawUrl,
+            fallbackUrl
+        );
 
     if (!url) {
         return null;
     }
 
-    // Determine type from the URL first.
     const urlType =
         classifyPolicyUrl(url);
 
-    // If URL does not look like a policy URL,
-    // reject the document.
     if (!urlType) {
         return null;
     }
 
-    // Expected type has priority only when it matches the
-    // actual URL classification.
     const type =
         expectedType &&
         expectedType === urlType
             ? expectedType
             : urlType;
 
-    const content = cleanText(
-        document.content ||
-        document.text ||
-        document.page_text ||
-        document.markdown ||
-        document.body_text ||
-        ""
-    );
+    const content =
+        cleanText(
+            document.content ||
+            document.text ||
+            document.page_text ||
+            document.markdown ||
+            document.body_text ||
+            ""
+        );
 
     if (
         !isSubstantiveDocument(
@@ -483,9 +465,9 @@ function normalizeDocument(
     }
 
     return {
-        type: type,
+        type,
 
-        url: url,
+        url,
 
         title:
             document.title ||
@@ -514,7 +496,6 @@ function deduplicateDocuments(
     const result = [];
 
     const seenUrls = new Set();
-
     const seenContent = new Set();
 
     for (
@@ -646,14 +627,12 @@ async function executeDirectCollector(
             await chrome.scripting.executeScript(
                 {
                     target: {
-                        tabId: tabId
+                        tabId
                     },
 
                     func: () => {
 
-                        function clean(
-                            value
-                        ) {
+                        function clean(value) {
                             if (
                                 !value ||
                                 typeof value !== "string"
@@ -662,18 +641,9 @@ async function executeDirectCollector(
                             }
 
                             return value
-                                .replace(
-                                    /\u00a0/g,
-                                    " "
-                                )
-                                .replace(
-                                    /\r/g,
-                                    ""
-                                )
-                                .replace(
-                                    /[ \t]+/g,
-                                    " "
-                                )
+                                .replace(/\u00a0/g, " ")
+                                .replace(/\r/g, "")
+                                .replace(/[ \t]+/g, " ")
                                 .replace(
                                     /\n\s*\n\s*\n+/g,
                                     "\n\n"
@@ -682,9 +652,7 @@ async function executeDirectCollector(
                         }
 
 
-                        function classify(
-                            url
-                        ) {
+                        function classify(url) {
                             if (
                                 !url ||
                                 typeof url !== "string"
@@ -696,7 +664,6 @@ async function executeDirectCollector(
                                 const parsed =
                                     new URL(url);
 
-                                // ONLY pathname.
                                 const path =
                                     parsed.pathname
                                         .toLowerCase()
@@ -705,9 +672,6 @@ async function executeDirectCollector(
                                             "/"
                                         );
 
-                                // Never classify /s/...,
-                                // product pages, campaigns,
-                                // etc. as policies.
                                 const blocked = [
                                     /^\/s(?:\/|$)/,
                                     /^\/product(?:\/|$)/,
@@ -725,7 +689,15 @@ async function executeDirectCollector(
                                     /^\/offer(?:\/|$)/,
                                     /^\/offers(?:\/|$)/,
                                     /^\/campaign(?:\/|$)/,
-                                    /^\/campaigns(?:\/|$)/
+                                    /^\/campaigns(?:\/|$)/,
+                                    /^\/catalog(?:\/|$)/,
+                                    /^\/catalogue(?:\/|$)/,
+                                    /^\/beauty(?:\/|$)/,
+                                    /^\/skin(?:\/|$)/,
+                                    /^\/makeup(?:\/|$)/,
+                                    /^\/hair(?:\/|$)/,
+                                    /^\/bath(?:\/|$)/,
+                                    /^\/body(?:\/|$)/
                                 ];
 
                                 if (
@@ -740,114 +712,62 @@ async function executeDirectCollector(
                                 }
 
                                 if (
-                                    /privacy/.test(
-                                        path
-                                    )
+                                    /privacy/.test(path)
                                 ) {
                                     return "privacy";
                                 }
 
                                 if (
-                                    /terms?/.test(
-                                        path
-                                    ) ||
-                                    /termsofuse/.test(
-                                        path
-                                    ) ||
-                                    /terms[-_]?of[-_]?use/.test(
-                                        path
-                                    ) ||
-                                    /terms[-_]?and[-_]?conditions/.test(
-                                        path
-                                    ) ||
-                                    /terms[-_]?conditions/.test(
-                                        path
-                                    ) ||
-                                    /conditions[-_]?of[-_]?use/.test(
-                                        path
-                                    )
+                                    /terms?/.test(path) ||
+                                    /termsofuse/.test(path) ||
+                                    /terms[-_]?of[-_]?use/.test(path) ||
+                                    /terms[-_]?and[-_]?conditions/.test(path) ||
+                                    /terms[-_]?conditions/.test(path) ||
+                                    /conditions[-_]?of[-_]?use/.test(path)
                                 ) {
                                     return "terms";
                                 }
 
                                 if (
-                                    /cookies?/.test(
-                                        path
-                                    )
+                                    /cookies?/.test(path)
                                 ) {
                                     return "cookies";
                                 }
 
                                 if (
-                                    /return/.test(
-                                        path
-                                    ) ||
-                                    /refund/.test(
-                                        path
-                                    ) ||
-                                    /cancellation/.test(
-                                        path
-                                    ) ||
-                                    /exchange/.test(
-                                        path
-                                    )
+                                    /return/.test(path) ||
+                                    /refund/.test(path) ||
+                                    /cancellation/.test(path) ||
+                                    /exchange/.test(path)
                                 ) {
                                     return "returns";
                                 }
 
                                 if (
-                                    /payment/.test(
-                                        path
-                                    ) ||
-                                    /payments/.test(
-                                        path
-                                    ) ||
-                                    /fees?/.test(
-                                        path
-                                    ) ||
-                                    /billing/.test(
-                                        path
-                                    )
+                                    /payment/.test(path) ||
+                                    /payments/.test(path) ||
+                                    /fees?/.test(path) ||
+                                    /billing/.test(path)
                                 ) {
                                     return "payments";
                                 }
 
                                 if (
-                                    /promotion[-_]?policy/.test(
-                                        path
-                                    ) ||
-                                    /promotions[-_]?policy/.test(
-                                        path
-                                    ) ||
-                                    /sale[-_]?policy/.test(
-                                        path
-                                    ) ||
-                                    /offer[-_]?policy/.test(
-                                        path
-                                    )
+                                    /promotion[-_]?policy/.test(path) ||
+                                    /promotions[-_]?policy/.test(path) ||
+                                    /sale[-_]?policy/.test(path) ||
+                                    /offer[-_]?policy/.test(path)
                                 ) {
                                     return "promotions";
                                 }
 
                                 if (
-                                    /\/legal(?:\/|$)/.test(
-                                        path
-                                    ) ||
-                                    /notice/.test(
-                                        path
-                                    ) ||
-                                    /notices/.test(
-                                        path
-                                    ) ||
-                                    /disclaimer/.test(
-                                        path
-                                    ) ||
-                                    /agreement/.test(
-                                        path
-                                    ) ||
-                                    /corporate/.test(
-                                        path
-                                    )
+                                    /\/legal(?:\/|$)/.test(path) ||
+                                    /notice/.test(path) ||
+                                    /notices/.test(path) ||
+                                    /disclaimer/.test(path) ||
+                                    /agreement/.test(path) ||
+                                    /corporate/.test(path)
                                 ) {
                                     return "legal";
                                 }
@@ -860,9 +780,7 @@ async function executeDirectCollector(
                         }
 
 
-                        function normalizeHref(
-                            href
-                        ) {
+                        function normalizeHref(href) {
                             try {
                                 const absolute =
                                     new URL(
@@ -913,45 +831,34 @@ async function executeDirectCollector(
                             const type =
                                 classify(href);
 
-                            links.push(
-                                {
-                                    url: href,
+                            links.push({
+                                url: href,
 
-                                    text: clean(
-                                        anchor.innerText ||
-                                        anchor.textContent ||
-                                        ""
-                                    ),
+                                text: clean(
+                                    anchor.innerText ||
+                                    anchor.textContent ||
+                                    ""
+                                ),
 
-                                    // null is intentional.
-                                    // Do not treat every link as
-                                    // a policy.
-                                    type: type
-                                }
-                            );
+                                type
+                            });
                         }
 
 
-                        // Deduplicate links.
                         const uniqueLinks = [];
 
-                        const seen =
-                            new Set();
+                        const seen = new Set();
 
                         for (
                             const link of links
                         ) {
                             if (
-                                seen.has(
-                                    link.url
-                                )
+                                seen.has(link.url)
                             ) {
                                 continue;
                             }
 
-                            seen.add(
-                                link.url
-                            );
+                            seen.add(link.url);
 
                             uniqueLinks.push(
                                 link
@@ -963,8 +870,7 @@ async function executeDirectCollector(
                             clean(
                                 document.body
                                     ? (
-                                        document.body
-                                            .innerText ||
+                                        document.body.innerText ||
                                         ""
                                     )
                                     : ""
@@ -977,9 +883,6 @@ async function executeDirectCollector(
                             );
 
 
-                        // IMPORTANT:
-                        // Current page becomes a policy document
-                        // only if its URL itself is a policy URL.
                         const browserDocument =
                             currentType &&
                             pageText.length >= 500
@@ -1037,8 +940,7 @@ async function executeDirectCollector(
         if (
             Array.isArray(results) &&
             results.length > 0 &&
-            results[0] &&
-            results[0].result
+            results[0]?.result
         ) {
             return results[0].result;
         }
@@ -1060,9 +962,7 @@ async function executeDirectCollector(
 // COLLECT TAB
 // ============================================================
 
-async function collectTab(
-    tabId
-) {
+async function collectTab(tabId) {
     let data =
         await collectFromContentScript(
             tabId
@@ -1113,8 +1013,7 @@ async function collectTab(
                 : [],
 
         browser_page_text:
-            typeof data.browser_page_text ===
-            "string"
+            typeof data.browser_page_text === "string"
                 ? data.browser_page_text.slice(
                     0,
                     CONFIG.MAX_PAGE_TEXT
@@ -1138,98 +1037,83 @@ function waitForTabLoad(
     tabId,
     timeout = CONFIG.LOAD_TIMEOUT
 ) {
-    return new Promise(
-        resolve => {
+    return new Promise(resolve => {
 
-            let finished = false;
+        let finished = false;
+        let timer = null;
 
-            let timer = null;
-
-
-            function cleanup() {
-                try {
-                    chrome.tabs.onUpdated.removeListener(
-                        listener
-                    );
-                } catch (error) {
-                    // Ignore cleanup errors.
-                }
-
-                if (timer) {
-                    clearTimeout(timer);
-                }
-            }
-
-
-            function finish(
-                result
-            ) {
-                if (finished) {
-                    return;
-                }
-
-                finished = true;
-
-                cleanup();
-
-                resolve(result);
-            }
-
-
-            function listener(
-                updatedTabId,
-                changeInfo
-            ) {
-                if (
-                    updatedTabId !== tabId
-                ) {
-                    return;
-                }
-
-                if (
-                    changeInfo.status ===
-                    "complete"
-                ) {
-                    finish(true);
-                }
-            }
-
-
-            timer =
-                setTimeout(
-                    () => {
-                        finish(false);
-                    },
-                    timeout
+        function cleanup() {
+            try {
+                chrome.tabs.onUpdated.removeListener(
+                    listener
                 );
+            } catch (error) {
+                // Ignore cleanup errors.
+            }
+
+            if (timer) {
+                clearTimeout(timer);
+            }
+        }
 
 
-            chrome.tabs.onUpdated.addListener(
-                listener
+        function finish(result) {
+            if (finished) {
+                return;
+            }
+
+            finished = true;
+
+            cleanup();
+
+            resolve(result);
+        }
+
+
+        function listener(
+            updatedTabId,
+            changeInfo
+        ) {
+            if (
+                updatedTabId !== tabId
+            ) {
+                return;
+            }
+
+            if (
+                changeInfo.status ===
+                "complete"
+            ) {
+                finish(true);
+            }
+        }
+
+
+        timer =
+            setTimeout(
+                () => finish(false),
+                timeout
             );
 
 
-            chrome.tabs.get(
-                tabId
-            )
-                .then(
-                    tab => {
-                        if (
-                            tab &&
-                            tab.status ===
-                            "complete"
-                        ) {
-                            finish(true);
-                        }
-                    }
-                )
-                .catch(
-                    () => {
-                        finish(false);
-                    }
-                );
-        }
-    );
+        chrome.tabs.onUpdated.addListener(
+            listener
+        );
+
+
+        chrome.tabs.get(tabId)
+            .then(tab => {
+                if (
+                    tab &&
+                    tab.status === "complete"
+                ) {
+                    finish(true);
+                }
+            })
+            .catch(() => {
+                finish(false);
+            });
+    });
 }
 
 
@@ -1237,9 +1121,7 @@ function waitForTabLoad(
 // SAFE TAB CLOSE
 // ============================================================
 
-async function closeTab(
-    tabId
-) {
+async function closeTab(tabId) {
     if (!tabId) {
         return;
     }
@@ -1249,7 +1131,7 @@ async function closeTab(
             tabId
         );
     } catch (error) {
-        // Tab may already be closed.
+        // Ignore already-closed tabs.
     }
 }
 
@@ -1272,7 +1154,6 @@ async function hydratePolicyUrl(
             return null;
         }
 
-        // A route probe must itself be a policy URL.
         const detectedType =
             classifyPolicyUrl(
                 normalizedTarget
@@ -1302,15 +1183,13 @@ async function hydratePolicyUrl(
         );
 
         const tab =
-            await chrome.tabs.create(
-                {
-                    url:
-                        normalizedTarget,
+            await chrome.tabs.create({
+                url:
+                    normalizedTarget,
 
-                    active:
-                        false
-                }
-            );
+                active:
+                    false
+            });
 
         tabId =
             tab.id;
@@ -1336,14 +1215,8 @@ async function hydratePolicyUrl(
         }
 
         const finalUrl =
-            currentTab &&
-            currentTab.url
-                ? currentTab.url
-                : normalizedTarget;
-
-        // ----------------------------------------------------
-        // Redirect validation
-        // ----------------------------------------------------
+            currentTab?.url ||
+            normalizedTarget;
 
         const finalType =
             classifyPolicyUrl(
@@ -1369,10 +1242,6 @@ async function hydratePolicyUrl(
             return null;
         }
 
-        // ----------------------------------------------------
-        // Collect rendered page
-        // ----------------------------------------------------
-
         const data =
             await collectTab(
                 tabId
@@ -1385,10 +1254,6 @@ async function hydratePolicyUrl(
                 ? data.browser_documents
                 : [];
 
-
-        // ----------------------------------------------------
-        // Prefer actual browser document
-        // ----------------------------------------------------
 
         for (
             const document of documents
@@ -1412,7 +1277,6 @@ async function hydratePolicyUrl(
                 );
 
             if (normalized) {
-
                 normalized.source =
                     "browser";
 
@@ -1424,10 +1288,6 @@ async function hydratePolicyUrl(
             }
         }
 
-
-        // ----------------------------------------------------
-        // Page-text fallback
-        // ----------------------------------------------------
 
         if (
             data.browser_page_text &&
@@ -1460,6 +1320,10 @@ async function hydratePolicyUrl(
                 );
 
             if (fallback) {
+                console.log(
+                    `[T&C Background] Policy text fallback collected: ${finalType} ${fallback.content.length} chars`
+                );
+
                 return fallback;
             }
         }
@@ -1504,7 +1368,6 @@ async function hydrateDiscoveredLinks(
 
     const seen = new Set();
 
-
     for (
         const link of links
     ) {
@@ -1541,8 +1404,6 @@ async function hydrateDiscoveredLinks(
             continue;
         }
 
-        // Re-classify ourselves.
-        // Never trust a type generated from query parameters.
         const type =
             classifyPolicyUrl(
                 url
@@ -1563,12 +1424,10 @@ async function hydrateDiscoveredLinks(
 
         seen.add(key);
 
-        candidates.push(
-            {
-                url: url,
-                type: type
-            }
-        );
+        candidates.push({
+            url,
+            type
+        });
 
         if (
             candidates.length >=
@@ -1592,11 +1451,6 @@ async function hydrateDiscoveredLinks(
 
 
     const documents = [];
-
-
-    // --------------------------------------------------------
-    // Process in small concurrent batches
-    // --------------------------------------------------------
 
     for (
         let i = 0;
@@ -1639,7 +1493,6 @@ async function hydrateDiscoveredLinks(
         }
     }
 
-
     return deduplicateDocuments(
         documents
     );
@@ -1649,9 +1502,23 @@ async function hydrateDiscoveredLinks(
 // ============================================================
 // SITE-SPECIFIC POLICY ROUTES
 // ============================================================
+//
+// These are fallback routes used when a site does not expose
+// usable policy links in the current page DOM.
+//
+// Browser tabs are used for extraction, so normal browser
+// session behavior remains available.
+//
+// ============================================================
 
 const SITE_SPECIFIC_ROUTES = {
+
+    // --------------------------------------------------------
+    // AJIO
+    // --------------------------------------------------------
+
     "ajio.com": [
+
         {
             path:
                 "/help/termsAndCondition",
@@ -1699,6 +1566,94 @@ const SITE_SPECIFIC_ROUTES = {
             type:
                 "promotions"
         }
+    ],
+
+
+    // --------------------------------------------------------
+    // NYKAA
+    // --------------------------------------------------------
+
+    "nykaa.com": [
+
+        {
+            path:
+                "/terms-conditions",
+
+            type:
+                "terms"
+        },
+
+        {
+            path:
+                "/app-terms-conditions",
+
+            type:
+                "terms"
+        },
+
+        {
+            path:
+                "/app-api/index.php/pages/terms",
+
+            type:
+                "terms"
+        },
+
+        {
+            path:
+                "/privacy-policy",
+
+            type:
+                "privacy"
+        },
+
+        {
+            path:
+                "/privacy-policy-app",
+
+            type:
+                "privacy"
+        },
+
+        {
+            path:
+                "/policy",
+
+            type:
+                "privacy"
+        },
+
+        {
+            path:
+                "/cancellation-policy",
+
+            type:
+                "returns"
+        },
+
+        {
+            path:
+                "/cancellation-policy/lp",
+
+            type:
+                "returns"
+        },
+
+        {
+            path:
+                "/policy-app",
+
+            type:
+                "terms"
+        },
+
+        {
+            path:
+                "/shipping-policy-app",
+
+            type:
+                "legal"
+        }
     ]
 };
 
@@ -1708,6 +1663,7 @@ const SITE_SPECIFIC_ROUTES = {
 // ============================================================
 
 const GENERIC_POLICY_ROUTES = [
+
     {
         path:
             "/privacy-policy",
@@ -1834,14 +1790,10 @@ const GENERIC_POLICY_ROUTES = [
 // GET ROUTE PROBES
 // ============================================================
 
-function getRouteProbes(
-    sourceUrl
-) {
+function getRouteProbes(sourceUrl) {
     try {
         const parsed =
-            new URL(
-                sourceUrl
-            );
+            new URL(sourceUrl);
 
         const hostname =
             parsed.hostname
@@ -1853,7 +1805,10 @@ function getRouteProbes(
 
         const routes = [];
 
-        // Site-specific routes first.
+        // ----------------------------------------------------
+        // Site-specific routes first
+        // ----------------------------------------------------
+
         const siteRoutes =
             SITE_SPECIFIC_ROUTES[
                 hostname
@@ -1863,7 +1818,10 @@ function getRouteProbes(
             ...siteRoutes
         );
 
-        // Then generic routes.
+        // ----------------------------------------------------
+        // Generic routes second
+        // ----------------------------------------------------
+
         routes.push(
             ...GENERIC_POLICY_ROUTES
         );
@@ -1873,7 +1831,6 @@ function getRouteProbes(
 
         const seen =
             new Set();
-
 
         for (
             const route of routes
@@ -1899,21 +1856,16 @@ function getRouteProbes(
                 continue;
             }
 
-            seen.add(
-                key
-            );
+            seen.add(key);
 
-            unique.push(
-                {
-                    url:
-                        fullUrl,
+            unique.push({
+                url:
+                    fullUrl,
 
-                    type:
-                        route.type
-                }
-            );
+                type:
+                    route.type
+            });
         }
-
 
         return unique;
 
@@ -1941,11 +1893,9 @@ async function probePolicyRoutes(
         return [];
     }
 
-
     console.log(
         `[T&C Background] Direct route probes: ${candidates.length}`
     );
-
 
     const documents = [];
 
@@ -1956,8 +1906,6 @@ async function probePolicyRoutes(
 
         while (true) {
 
-            // Stop requesting more routes after enough
-            // successful documents have been collected.
             if (
                 documents.length >=
                 CONFIG.TARGET_POLICY_DOCUMENTS
@@ -1978,18 +1926,15 @@ async function probePolicyRoutes(
             const candidate =
                 candidates[index];
 
-
             console.log(
                 `[T&C Background] Probing: ${candidate.url}`
             );
-
 
             const document =
                 await hydratePolicyUrl(
                     candidate.url,
                     candidate.type
                 );
-
 
             if (document) {
 
@@ -1999,6 +1944,11 @@ async function probePolicyRoutes(
 
                 console.log(
                     `[T&C Background] Probe SUCCESS: ${candidate.type} ${candidate.url}`
+                );
+            } else {
+
+                console.log(
+                    `[T&C Background] Probe FAILED: ${candidate.url}`
                 );
             }
         }
@@ -2013,7 +1963,6 @@ async function probePolicyRoutes(
             candidates.length
         );
 
-
     for (
         let i = 0;
         i < workerCount;
@@ -2024,15 +1973,871 @@ async function probePolicyRoutes(
         );
     }
 
-
     await Promise.all(
         workers
     );
 
-
     return deduplicateDocuments(
         documents
     );
+}
+
+
+// ============================================================
+// BROWSER WEB SEARCH FALLBACK
+// ============================================================
+//
+// FINAL FALLBACK:
+//
+// 1. Browser DOM discovery
+// 2. Direct browser route probing
+// 3. Browser-based web search
+//
+// IMPORTANT:
+// The search engine is ONLY used to discover URLs.
+// The actual policy page is opened in a Chrome tab and
+// extracted using the same browser-session collector.
+//
+// This avoids backend HTTP 403 / bot-protection problems.
+// ============================================================
+
+const WEB_SEARCH_QUERIES = [
+
+    {
+        type: "terms",
+        query:
+            'site:{domain} "terms and conditions"'
+    },
+
+    {
+        type: "terms",
+        query:
+            'site:{domain} "terms of use"'
+    },
+
+    {
+        type: "terms",
+        query:
+            'site:{domain} "terms of service"'
+    },
+
+    {
+        type: "privacy",
+        query:
+            'site:{domain} "privacy policy"'
+    },
+
+    {
+        type: "privacy",
+        query:
+            'site:{domain} "privacy notice"'
+    },
+
+    {
+        type: "cookies",
+        query:
+            'site:{domain} "cookie policy"'
+    },
+
+    {
+        type: "cookies",
+        query:
+            'site:{domain} "cookie notice"'
+    },
+
+    {
+        type: "returns",
+        query:
+            'site:{domain} "return policy"'
+    },
+
+    {
+        type: "returns",
+        query:
+            'site:{domain} "refund policy"'
+    },
+
+    {
+        type: "returns",
+        query:
+            'site:{domain} "cancellation policy"'
+    },
+
+    {
+        type: "payments",
+        query:
+            'site:{domain} "payment policy"'
+    },
+
+    {
+        type: "legal",
+        query:
+            'site:{domain} "legal notice"'
+    }
+];
+
+
+// ------------------------------------------------------------
+// Search URL helpers
+// ------------------------------------------------------------
+
+function getSearchDomain(sourceUrl) {
+
+    try {
+
+        const parsed =
+            new URL(sourceUrl);
+
+        return parsed.hostname
+            .toLowerCase()
+            .replace(/^www\./, "");
+
+    } catch (error) {
+
+        return "";
+
+    }
+}
+
+
+function buildWebSearchUrl(query) {
+
+    return (
+        "https://www.google.com/search?q=" +
+        encodeURIComponent(query)
+    );
+
+}
+
+
+// ------------------------------------------------------------
+// Extract links from rendered search results
+// ------------------------------------------------------------
+
+async function collectSearchResultLinks(
+    tabId,
+    sourceUrl,
+    expectedType
+) {
+
+    if (!tabId) {
+        return [];
+    }
+
+    try {
+
+        const results =
+            await chrome.scripting.executeScript({
+
+                target: {
+                    tabId
+                },
+
+                func: (
+                    sourceUrlArg,
+                    expectedTypeArg
+                ) => {
+
+                    function clean(value) {
+
+                        if (
+                            !value ||
+                            typeof value !== "string"
+                        ) {
+                            return "";
+                        }
+
+                        return value
+                            .replace(/\u00a0/g, " ")
+                            .replace(/\s+/g, " ")
+                            .trim();
+
+                    }
+
+
+                    function classify(url) {
+
+                        if (
+                            !url ||
+                            typeof url !== "string"
+                        ) {
+                            return null;
+                        }
+
+                        try {
+
+                            const parsed =
+                                new URL(url);
+
+                            const path =
+                                parsed.pathname
+                                    .toLowerCase()
+                                    .replace(
+                                        /\/+/g,
+                                        "/"
+                                    );
+
+
+                            const blocked = [
+                                /^\/s(?:\/|$)/,
+                                /^\/product(?:\/|$)/,
+                                /^\/products(?:\/|$)/,
+                                /^\/p(?:\/|$)/,
+                                /^\/shop(?:\/|$)/,
+                                /^\/search(?:\/|$)/,
+                                /^\/category(?:\/|$)/,
+                                /^\/categories(?:\/|$)/,
+                                /^\/collection(?:\/|$)/,
+                                /^\/collections(?:\/|$)/,
+                                /^\/brand(?:\/|$)/,
+                                /^\/brands(?:\/|$)/,
+                                /^\/sale(?:\/|$)/,
+                                /^\/offer(?:\/|$)/,
+                                /^\/offers(?:\/|$)/,
+                                /^\/campaign(?:\/|$)/,
+                                /^\/campaigns(?:\/|$)/,
+                                /^\/catalog(?:\/|$)/,
+                                /^\/catalogue(?:\/|$)/
+                            ];
+
+
+                            if (
+                                blocked.some(
+                                    pattern =>
+                                        pattern.test(
+                                            path
+                                        )
+                                )
+                            ) {
+                                return null;
+                            }
+
+
+                            if (
+                                /privacy/.test(path)
+                            ) {
+                                return "privacy";
+                            }
+
+
+                            if (
+                                /terms?/.test(path) ||
+                                /termsofuse/.test(path) ||
+                                /terms[-_]?of[-_]?use/.test(path) ||
+                                /terms[-_]?and[-_]?conditions/.test(path) ||
+                                /terms[-_]?conditions/.test(path)
+                            ) {
+                                return "terms";
+                            }
+
+
+                            if (
+                                /cookies?/.test(path)
+                            ) {
+                                return "cookies";
+                            }
+
+
+                            if (
+                                /return/.test(path) ||
+                                /refund/.test(path) ||
+                                /cancellation/.test(path) ||
+                                /exchange/.test(path)
+                            ) {
+                                return "returns";
+                            }
+
+
+                            if (
+                                /payment/.test(path) ||
+                                /payments/.test(path) ||
+                                /fees?/.test(path) ||
+                                /billing/.test(path)
+                            ) {
+                                return "payments";
+                            }
+
+
+                            if (
+                                /promotion[-_]?policy/.test(path) ||
+                                /promotions[-_]?policy/.test(path)
+                            ) {
+                                return "promotions";
+                            }
+
+
+                            if (
+                                /\/legal(?:\/|$)/.test(path) ||
+                                /notice/.test(path) ||
+                                /notices/.test(path) ||
+                                /disclaimer/.test(path) ||
+                                /agreement/.test(path) ||
+                                /corporate/.test(path)
+                            ) {
+                                return "legal";
+                            }
+
+
+                            return null;
+
+                        } catch (error) {
+
+                            return null;
+
+                        }
+
+                    }
+
+
+                    function sameSite(
+                        urlA,
+                        urlB
+                    ) {
+
+                        try {
+
+                            const a =
+                                new URL(urlA);
+
+                            const b =
+                                new URL(urlB);
+
+                            const hostA =
+                                a.hostname
+                                    .toLowerCase()
+                                    .replace(
+                                        /^www\./,
+                                        ""
+                                    );
+
+                            const hostB =
+                                b.hostname
+                                    .toLowerCase()
+                                    .replace(
+                                        /^www\./,
+                                        ""
+                                    );
+
+                            return (
+                                hostA ===
+                                hostB
+                            );
+
+                        } catch (error) {
+
+                            return false;
+
+                        }
+
+                    }
+
+
+                    const links = [];
+
+                    const anchors =
+                        Array.from(
+                            document.querySelectorAll(
+                                "a[href]"
+                            )
+                        );
+
+
+                    for (
+                        const anchor of anchors
+                    ) {
+
+                        let href;
+
+                        try {
+
+                            href =
+                                new URL(
+                                    anchor.href,
+                                    window.location.href
+                                ).href;
+
+                        } catch (error) {
+
+                            continue;
+
+                        }
+
+
+                        const type =
+                            classify(href);
+
+
+                        if (!type) {
+                            continue;
+                        }
+
+
+                        if (
+                            expectedTypeArg &&
+                            type !== expectedTypeArg
+                        ) {
+                            continue;
+                        }
+
+
+                        if (
+                            !sameSite(
+                                href,
+                                sourceUrlArg
+                            )
+                        ) {
+                            continue;
+                        }
+
+
+                        links.push({
+
+                            url:
+                                href,
+
+                            type,
+
+                            text:
+                                clean(
+                                    anchor.innerText ||
+                                    anchor.textContent ||
+                                    ""
+                                )
+
+                        });
+
+                    }
+
+
+                    const unique = [];
+
+                    const seen =
+                        new Set();
+
+
+                    for (
+                        const link of links
+                    ) {
+
+                        const key =
+                            link.url
+                                .toLowerCase();
+
+
+                        if (
+                            seen.has(key)
+                        ) {
+                            continue;
+                        }
+
+
+                        seen.add(key);
+
+                        unique.push(
+                            link
+                        );
+
+                    }
+
+
+                    return unique;
+
+                },
+
+                args: [
+                    sourceUrl,
+                    expectedType
+                ]
+
+            });
+
+
+        if (
+            !Array.isArray(results) ||
+            !results.length ||
+            !Array.isArray(
+                results[0]?.result
+            )
+        ) {
+            return [];
+        }
+
+
+        return results[0].result;
+
+    } catch (error) {
+
+        console.warn(
+            "[T&C Background] Search result extraction failed:",
+            error?.message || error
+        );
+
+        return [];
+
+    }
+}
+
+
+// ------------------------------------------------------------
+// Browser web-search query
+// ------------------------------------------------------------
+
+async function runBrowserWebSearch(
+    sourceUrl,
+    expectedType,
+    query
+) {
+
+    let tabId = null;
+
+    try {
+
+        const searchUrl =
+            buildWebSearchUrl(
+                query
+            );
+
+
+        console.log(
+            `[T&C Background] Web search: ${query}`
+        );
+
+
+        const tab =
+            await chrome.tabs.create({
+
+                url:
+                    searchUrl,
+
+                active:
+                    false
+
+            });
+
+
+        tabId =
+            tab.id;
+
+
+        if (!tabId) {
+            return [];
+        }
+
+
+        await waitForTabLoad(
+            tabId,
+            CONFIG.WEB_SEARCH_TIMEOUT
+        );
+
+
+        const links =
+            await collectSearchResultLinks(
+                tabId,
+                sourceUrl,
+                expectedType
+            );
+
+
+        console.log(
+            `[T&C Background] Search discovered ${links.length} same-site ${expectedType} links`
+        );
+
+
+        return links;
+
+    } catch (error) {
+
+        console.warn(
+            `[T&C Background] Browser web search failed:`,
+            error?.message || error
+        );
+
+        return [];
+
+    } finally {
+
+        await closeTab(
+            tabId
+        );
+
+    }
+}
+
+
+// ------------------------------------------------------------
+// THIRD FALLBACK
+// ------------------------------------------------------------
+
+async function browserWebSearchFallback(
+    sourceUrl
+) {
+
+    if (
+        !CONFIG.WEB_SEARCH_ENABLED
+    ) {
+        return [];
+    }
+
+
+    const domain =
+        getSearchDomain(
+            sourceUrl
+        );
+
+
+    if (!domain) {
+        return [];
+    }
+
+
+    console.log(
+        "================================================"
+    );
+
+    console.log(
+        "[T&C Background] THIRD FALLBACK: BROWSER WEB SEARCH"
+    );
+
+    console.log(
+        `[T&C Background] Search domain: ${domain}`
+    );
+
+    console.log(
+        "================================================"
+    );
+
+
+    const discovered = [];
+
+    const seen =
+        new Set();
+
+
+    const queryLimit =
+        Math.min(
+            CONFIG.WEB_SEARCH_MAX_QUERIES,
+            WEB_SEARCH_QUERIES.length
+        );
+
+
+    for (
+        let i = 0;
+        i < queryLimit;
+        i++
+    ) {
+
+        if (
+            discovered.length >=
+            CONFIG.TARGET_POLICY_DOCUMENTS
+        ) {
+            break;
+        }
+
+
+        const definition =
+            WEB_SEARCH_QUERIES[i];
+
+
+        const query =
+            definition.query.replace(
+                "{domain}",
+                domain
+            );
+
+
+        const links =
+            await runBrowserWebSearch(
+                sourceUrl,
+                definition.type,
+                query
+            );
+
+
+        for (
+            const link of links
+        ) {
+
+            const url =
+                normalizeUrl(
+                    link.url,
+                    sourceUrl
+                );
+
+
+            if (!url) {
+                continue;
+            }
+
+
+            if (
+                !sameSite(
+                    url,
+                    sourceUrl
+                )
+            ) {
+                continue;
+            }
+
+
+            if (
+                isBadUrl(url)
+            ) {
+                continue;
+            }
+
+
+            const detectedType =
+                classifyPolicyUrl(
+                    url
+                );
+
+
+            if (!detectedType) {
+                continue;
+            }
+
+
+            if (
+                detectedType !==
+                definition.type
+            ) {
+                continue;
+            }
+
+
+            const key =
+                url
+                    .toLowerCase()
+                    .replace(
+                        /\/+$/,
+                        ""
+                    );
+
+
+            if (
+                seen.has(key)
+            ) {
+                continue;
+            }
+
+
+            seen.add(key);
+
+
+            discovered.push({
+
+                url,
+
+                type:
+                    detectedType
+
+            });
+
+
+            console.log(
+                `[T&C Background] WEB SEARCH CANDIDATE: ${detectedType} ${url}`
+            );
+
+
+            if (
+                discovered.length >=
+                CONFIG.TARGET_POLICY_DOCUMENTS
+            ) {
+                break;
+            }
+
+        }
+
+    }
+
+
+    if (
+        discovered.length === 0
+    ) {
+
+        console.log(
+            "[T&C Background] Browser web search found no policy URLs."
+        );
+
+        return [];
+
+    }
+
+
+    console.log(
+        `[T&C Background] Browser web search discovered ${discovered.length} policy URLs. Hydrating...`
+    );
+
+
+    const documents = [];
+
+
+    for (
+        let i = 0;
+        i < discovered.length;
+        i += CONFIG.PROBE_CONCURRENCY
+    ) {
+
+        const batch =
+            discovered.slice(
+                i,
+                i +
+                    CONFIG.PROBE_CONCURRENCY
+            );
+
+
+        const results =
+            await Promise.all(
+                batch.map(
+                    candidate =>
+                        hydratePolicyUrl(
+                            candidate.url,
+                            candidate.type
+                        )
+                )
+            );
+
+
+        for (
+            const document of results
+        ) {
+
+            if (document) {
+
+                document.source =
+                    "browser_web_search";
+
+                documents.push(
+                    document
+                );
+
+            }
+
+        }
+
+
+        if (
+            documents.length >=
+            CONFIG.TARGET_POLICY_DOCUMENTS
+        ) {
+            break;
+        }
+
+    }
+
+
+    const finalDocuments =
+        deduplicateDocuments(
+            documents
+        );
+
+
+    console.log(
+        `[T&C Background] THIRD FALLBACK COMPLETE: ${finalDocuments.length} policy documents`
+    );
+
+
+    return finalDocuments;
 }
 
 
@@ -2046,7 +2851,6 @@ async function handleCollectPolicyData(
 ) {
     let sourceTab = null;
 
-
     try {
 
         // ----------------------------------------------------
@@ -2059,16 +2863,12 @@ async function handleCollectPolicyData(
             )
         ) {
             try {
-
                 sourceTab =
                     await chrome.tabs.get(
                         message.tabId
                     );
-
             } catch (error) {
-
-                sourceTab =
-                    null;
+                sourceTab = null;
             }
         }
 
@@ -2094,15 +2894,13 @@ async function handleCollectPolicyData(
             !sourceTab?.id
         ) {
             const activeTabs =
-                await chrome.tabs.query(
-                    {
-                        active:
-                            true,
+                await chrome.tabs.query({
+                    active:
+                        true,
 
-                        currentWindow:
-                            true
-                    }
-                );
+                    currentWindow:
+                        true
+                });
 
             sourceTab =
                 activeTabs?.[0] ||
@@ -2166,14 +2964,12 @@ async function handleCollectPolicyData(
                 sourceTab.id
             );
 
-
         const browserLinks =
             Array.isArray(
                 browserData.browser_links
             )
                 ? browserData.browser_links
                 : [];
-
 
         const browserAllLinks =
             Array.isArray(
@@ -2183,10 +2979,6 @@ async function handleCollectPolicyData(
                 : browserLinks;
 
 
-        // IMPORTANT:
-        // Normalize current-page documents through the strict
-        // URL classifier. This removes false positives such as
-        // AJIO /s/min35percentoff URLs.
         let documents =
             deduplicateDocuments(
                 browserData.browser_documents ||
@@ -2230,15 +3022,11 @@ async function handleCollectPolicyData(
                     sourceUrl
                 );
 
-
             documents =
-                deduplicateDocuments(
-                    [
-                        ...documents,
-
-                        ...discoveredDocuments
-                    ]
-                );
+                deduplicateDocuments([
+                    ...documents,
+                    ...discoveredDocuments
+                ]);
         }
 
 
@@ -2250,38 +3038,54 @@ async function handleCollectPolicyData(
         // ----------------------------------------------------
         // STEP 3
         // Direct route probing
-        //
-        // Only happens if ZERO valid policy documents were
-        // extracted.
         // ----------------------------------------------------
 
         if (
-            documents.length === 0
+            documents.length <
+            CONFIG.TARGET_POLICY_DOCUMENTS
         ) {
-
-            console.log(
-                "[T&C Background] No valid policy documents found."
-            );
 
             console.log(
                 "[T&C Background] Starting direct policy route probes..."
             );
-
 
             const routeDocuments =
                 await probePolicyRoutes(
                     sourceUrl
                 );
 
+            documents =
+                deduplicateDocuments([
+                    ...documents,
+                    ...routeDocuments
+                ]);
+        }
+
+
+        // ----------------------------------------------------
+        // STEP 4
+        // Browser web-search fallback
+        // ----------------------------------------------------
+
+        if (
+            documents.length <
+            CONFIG.TARGET_POLICY_DOCUMENTS
+        ) {
+
+            console.log(
+                "[T&C Background] Starting browser web-search fallback..."
+            );
+
+            const searchDocuments =
+                await browserWebSearchFallback(
+                    sourceUrl
+                );
 
             documents =
-                deduplicateDocuments(
-                    [
-                        ...documents,
-
-                        ...routeDocuments
-                    ]
-                );
+                deduplicateDocuments([
+                    ...documents,
+                    ...searchDocuments
+                ]);
         }
 
 
@@ -2351,7 +3155,6 @@ async function handleCollectPolicyData(
             error
         );
 
-
         return {
             ok:
                 false,
@@ -2398,7 +3201,6 @@ chrome.runtime.onMessage.addListener(
             return false;
         }
 
-
         handleCollectPolicyData(
             message,
             sender
@@ -2413,37 +3215,32 @@ chrome.runtime.onMessage.addListener(
             .catch(
                 error => {
 
-                    sendResponse(
-                        {
-                            ok:
-                                false,
+                    sendResponse({
+                        ok:
+                            false,
 
-                            error:
-                                error?.message ||
-                                String(error),
+                        error:
+                            error?.message ||
+                            String(error),
 
-                            browser_links:
-                                [],
+                        browser_links:
+                            [],
 
-                            browser_all_links:
-                                [],
+                        browser_all_links:
+                            [],
 
-                            browser_documents:
-                                [],
+                        browser_documents:
+                            [],
 
-                            browser_page_text:
-                                "",
+                        browser_page_text:
+                            "",
 
-                            documents:
-                                []
-                        }
-                    );
+                        documents:
+                            []
+                    });
                 }
             );
 
-
-        // Keep the message channel open for
-        // the asynchronous response.
         return true;
     }
 );
