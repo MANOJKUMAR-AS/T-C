@@ -6,7 +6,7 @@ Purpose:
 
 Discovery order:
     1. Browser-collected policy links/documents
-    2. Backend/static/dynamic extraction + Crawl4AI
+    2. Backend/static/dynamic extraction + Firecrawl
     3. Public web search + deterministic policy route discovery
 
 Important:
@@ -20,7 +20,6 @@ different companies without site-specific hardcoding.
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import re
 from typing import Dict, List
@@ -33,19 +32,6 @@ from urllib.parse import (
 
 import requests
 from bs4 import BeautifulSoup
-
-try:
-    from crawl4ai import (
-        AsyncWebCrawler,
-        BrowserConfig,
-        CrawlerRunConfig,
-        CacheMode,
-    )
-except ImportError:
-    AsyncWebCrawler = None
-    BrowserConfig = None
-    CrawlerRunConfig = None
-    CacheMode = None
 
 
 # ---------------------------------------------------------------------
@@ -60,7 +46,7 @@ MIN_POLICY_SCORE = 3
 
 SEARCH_RESULTS_PER_QUERY = 8
 
-MAX_ROUTE_CANDIDATES = 20
+MAX_ROUTE_CANDIDATES = 80
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -131,43 +117,39 @@ POLICY_QUERIES = {
 
 POLICY_ROUTES = {
     "terms": [
-        # High-confidence common routes.
         "/terms",
         "/terms-of-use",
         "/terms-of-service",
         "/terms-and-conditions",
-        "/app-terms-conditions",
-        "/app/terms",
-        "/app/terms-and-conditions",
-
-        # Common legal/policy route variants.
+        "/terms-conditions",
+        "/terms_conditions",
+        "/termsofuse",
+        "/termsconditions",
+        "/terms-and-condition",
+        "/termsconditions",
         "/legal/terms",
         "/legal/terms-of-use",
         "/legal/terms-and-conditions",
+        "/legal/terms-conditions",
         "/policies/terms",
         "/policies/terms-of-use",
         "/policies/terms-and-conditions",
         "/policy/terms",
         "/policy/terms-of-use",
         "/policy/terms-and-conditions",
-
-        # Compact naming variants.
-        "/termsofuse",
-        "/termsconditions",
+        "/app-terms-conditions",
+        "/app/terms",
+        "/app/terms-and-conditions",
     ],
     "privacy": [
-        # High-confidence common routes.
         "/privacy",
         "/privacy-policy",
-        "/privacy-policy-app",
-        "/privacy-policy-mobile",
-        "/policy",
-
-        # Common variants.
         "/privacy_policy",
         "/privacypolicy",
         "/privacy-notice",
         "/privacy_notice",
+        "/privacy-policy-app",
+        "/privacy-policy-mobile",
         "/privacy/app",
         "/legal/privacy",
         "/legal/privacy-policy",
@@ -175,6 +157,7 @@ POLICY_ROUTES = {
         "/policies/privacy-policy",
         "/policy/privacy",
         "/policy/privacy-policy",
+        "/policy",
     ],
     "cookies": [
         "/cookies",
@@ -881,159 +864,84 @@ def _is_policy_content(
 
 def _fetch_policy_page(url: str) -> str:
     """
-    Fetch a real company policy page using Crawl4AI.
-
-    Raw requests are intentionally avoided here because many
-    JavaScript-heavy websites, including Nykaa, return HTTP 403
-    to non-browser HTTP clients.
-
-    Crawl4AI uses a real browser and therefore matches the
-    browser-based extraction path already used by Agent 1.
+    Fetch actual policy page and extract text.
     """
-
-    if not url:
-        return ""
-
-    if AsyncWebCrawler is None:
-        print(
-            "Crawl4AI is not available. "
-            "Cannot fetch policy page."
-        )
-        return ""
-
-    async def _crawl() -> str:
-        browser_config = BrowserConfig(
-            headless=True,
-            verbose=False,
+    try:
+        response = requests.get(
+            url,
+            headers=PAGE_HEADERS,
+            timeout=REQUEST_TIMEOUT,
+            allow_redirects=True,
         )
 
-        run_config = CrawlerRunConfig(
-            cache_mode=CacheMode.BYPASS,
-            wait_until="networkidle",
-        )
-
-        async with AsyncWebCrawler(
-            config=browser_config
-        ) as crawler:
-
-            result = await crawler.arun(
-                url=url,
-                config=run_config,
+        if response.status_code != 200:
+            print(
+                f"Policy page fetch failed: "
+                f"HTTP {response.status_code} "
+                f"{url}"
             )
-
-            if not result:
-                return ""
-
-            # Prefer Crawl4AI markdown because it is already
-            # normalized for downstream language processing.
-            markdown = str(
-                getattr(
-                    result,
-                    "markdown",
-                    "",
-                )
-                or ""
-            ).strip()
-
-            if markdown:
-                return _clean_text(markdown)
-
-            # Fallback to cleaned HTML when markdown is empty.
-            cleaned_html = str(
-                getattr(
-                    result,
-                    "cleaned_html",
-                    "",
-                )
-                or ""
-            ).strip()
-
-            if cleaned_html:
-                soup = BeautifulSoup(
-                    cleaned_html,
-                    "html.parser",
-                )
-
-                for tag in soup(
-                    [
-                        "script",
-                        "style",
-                        "noscript",
-                        "svg",
-                    ]
-                ):
-                    tag.decompose()
-
-                return _clean_text(
-                    soup.get_text(
-                        "\n",
-                        strip=True,
-                    )
-                )
-
-            # Last Crawl4AI fallback.
-            raw_html = str(
-                getattr(
-                    result,
-                    "html",
-                    "",
-                )
-                or ""
-            ).strip()
-
-            if raw_html:
-                soup = BeautifulSoup(
-                    raw_html,
-                    "html.parser",
-                )
-
-                for tag in soup(
-                    [
-                        "script",
-                        "style",
-                        "noscript",
-                        "svg",
-                    ]
-                ):
-                    tag.decompose()
-
-                return _clean_text(
-                    soup.get_text(
-                        "\n",
-                        strip=True,
-                    )
-                )
-
             return ""
 
-    try:
-        print(
-            f"Crawl4AI policy fetch: {url}"
+        content_type = (
+            response.headers.get(
+                "content-type",
+                "",
+            ).lower()
         )
 
-        text = asyncio.run(
-            _crawl()
+        if (
+            "text/html" not in content_type
+            and "application/xhtml+xml"
+            not in content_type
+        ):
+            print(
+                f"Policy page skipped, "
+                f"non-HTML: {content_type} "
+                f"{url}"
+            )
+            return ""
+
+        text = _extract_page_text(
+            response.text
         )
 
         if len(text) < MIN_PAGE_CHARS:
             print(
-                f"Crawl4AI policy page too short: "
+                f"Policy page too short: "
                 f"{len(text)} chars "
                 f"{url}"
             )
             return ""
 
+        final_url = (
+            response.url
+            or url
+        )
+
+        if final_url != url:
+            print(
+                f"Policy page redirected: "
+                f"{url} -> {final_url}"
+            )
+
         print(
-            f"Crawl4AI policy page fetched: "
+            f"Policy page fetched successfully: "
             f"{len(text)} chars "
-            f"{url}"
+            f"{final_url}"
         )
 
         return text
 
+    except requests.RequestException as exc:
+        print(
+            f"Policy page request failed: "
+            f"{url} | {exc}"
+        )
+        return ""
+
     except Exception as exc:
         print(
-            f"Crawl4AI policy fetch failed: "
+            f"Policy page extraction failed: "
             f"{url} | {exc}"
         )
         return ""
@@ -1259,94 +1167,62 @@ def _search(
 
 def _build_route_candidates(
     base_url: str,
-) -> List[Dict]:
+) -> List[Dict[str, str]]:
     """
-    Build a small, high-confidence set of policy URL candidates.
+    Generate generic policy route candidates from the company's
+    base URL.
 
-    The caller expects each candidate to be a dictionary containing
-    at least "url" and "type".
+    The routes are only candidates. Actual content must still be
+    fetched and validated.
     """
-
-    if not base_url:
-        return []
-
     parsed = urlparse(base_url)
 
-    if not parsed.scheme or not parsed.netloc:
+    if not parsed.scheme or not parsed.hostname:
         return []
 
-    priority_routes = [
-        # Terms & Conditions
-        ("/terms", "terms"),
-        ("/terms-of-use", "terms"),
-        ("/terms-of-service", "terms"),
-        ("/terms-and-conditions", "terms"),
-        ("/terms-conditions", "terms"),
-        ("/app-terms-conditions", "terms"),
-        ("/policy-app", "terms"),
-        ("/app/terms", "terms"),
-        ("/app/terms-and-conditions", "terms"),
+    origin = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            "",
+            "",
+            "",
+            "",
+        )
+    ).rstrip("/")
 
-        # Privacy
-        ("/privacy", "privacy"),
-        ("/privacy-policy", "privacy"),
-        ("/privacy-policy-app", "privacy"),
-        ("/privacy-policy-mobile", "privacy"),
-        ("/policy", "privacy"),
-        ("/privacy-notice", "privacy"),
+    candidates: List[Dict[str, str]] = []
 
-        # Cookies
-        ("/cookies", "cookies"),
-        ("/cookie-policy", "cookies"),
+    for policy_type, routes in POLICY_ROUTES.items():
 
-        # Returns / Refunds
-        ("/returns", "returns"),
-        ("/return-policy", "returns"),
-        ("/refund-policy", "returns"),
+        for route in routes:
 
-        # Legal
-        ("/legal", "legal"),
-        ("/legal-notice", "legal"),
-    ]
-
-    candidates: List[Dict] = []
-    seen = set()
-
-    for route, policy_type in priority_routes:
-        candidate_url = urlunparse(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                route,
-                "",
-                "",
-                "",
+            candidate = (
+                f"{origin}{route}"
             )
-        )
 
-        normalized = _canonical_url(candidate_url)
+            candidates.append(
+                {
+                    "url": candidate,
+                    "type": policy_type,
+                    "discovery_method": (
+                        "deterministic_policy_route"
+                    ),
+                }
+            )
 
-        if not normalized:
-            continue
-
-        if normalized in seen:
-            continue
-
-        seen.add(normalized)
-
-        candidates.append(
-            {
-                "url": normalized,
-                "type": policy_type,
-                "source": "deterministic_route",
-                "discovery_method": "deterministic_policy_route",
-            }
-        )
-
-        if len(candidates) >= MAX_ROUTE_CANDIDATES:
-            break
+            if (
+                len(candidates)
+                >= MAX_ROUTE_CANDIDATES
+            ):
+                return candidates
 
     return candidates
+
+
+# ---------------------------------------------------------------------
+# Main public fallback
+# ---------------------------------------------------------------------
 
 
 def search_policy_documents(

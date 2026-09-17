@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from typing import Any, Dict, Iterable
@@ -1792,10 +1792,13 @@ def score_clause(
         ),
     )
 
-    if score > 80:
+    if score >= 80:
+        level = "CRITICAL"
+
+    elif score >= 60:
         level = "HIGH"
 
-    elif score >= 45:
+    elif score >= 30:
         level = "MEDIUM"
 
     else:
@@ -1878,10 +1881,13 @@ def level_for_score(
     score: int,
 ) -> str:
 
-    if score > 80:
+    if score >= 80:
+        return "CRITICAL"
+
+    if score >= 60:
         return "HIGH"
 
-    if score >= 45:
+    if score >= 30:
         return "MEDIUM"
 
     return "LOW"

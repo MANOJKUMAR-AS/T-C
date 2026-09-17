@@ -129,7 +129,7 @@ function ensureAgent3UI() {
 
             Overall score:
             <strong id="agent3OverallScore">
-                0/100
+                0/10
             </strong>
 
             &nbsp;·&nbsp;
@@ -1080,7 +1080,7 @@ function renderAgent3(result) {
 
 
     els.agent3OverallScore.textContent =
-        `${overallScore}/100`;
+        `${overallScore}/10`;
 
 
     els.agent3ClauseCount.textContent =
@@ -1182,7 +1182,8 @@ function renderAgent3(result) {
                 ·
                 ${escapeHtml(riskLevel)}
                 · score
-                ${escapeHtml(riskScore)} /100
+                ${escapeHtml(riskScore)}
+                /10
             </div>
 
             <div class="clause-label">
@@ -1803,4 +1804,3 @@ els.reanalyze.addEventListener(
     }
 
 })();
-
