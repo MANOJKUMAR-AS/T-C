@@ -145,10 +145,9 @@ def normalize_agent2_risk_level(
     Normalize Agent 2's authoritative risk level.
 
     Agent 2 uses:
-        0-29   LOW
-        30-59  MEDIUM
-        60-79  HIGH
-        80-100 CRITICAL
+        0-44   LOW
+        45-80  MEDIUM
+        81-100 HIGH
     """
 
     if isinstance(risk_level, str):
@@ -169,13 +168,10 @@ def normalize_agent2_risk_level(
         if normalized in mapping:
             return mapping[normalized]
 
-    if score >= 80:
-        return RiskLevel.CRITICAL
-
-    if score >= 60:
+    if score > 80:
         return RiskLevel.HIGH
 
-    if score >= 30:
+    if score >= 45:
         return RiskLevel.MEDIUM
 
     return RiskLevel.LOW
@@ -227,12 +223,29 @@ def convert_analysis(
     raw_analysis: Dict[str, Any],
 ) -> ClauseAnalysis:
     """
-    Convert one LLM analysis into ClauseAnalysis.
+    Convert one LLM JSON analysis object into a ClauseAnalysis.
 
-    This function is retained for Agent 3 standalone tests.
+    SCALE CONTRACT
+    ==============
+    convert_analysis() always uses the 0-100 normaliser
+    (normalize_agent2_risk_score / normalize_agent2_risk_level).
 
-    When Agent 2 values are supplied in the raw analysis,
-    those values are preserved.
+    Reasoning:
+    - In the production pipeline (Agent 2 → Agent 3) the LLM is
+      instructed to echo back Agent 2's 0-100 scores unchanged.
+      _preserve_agent2_risk() then unconditionally replaces every
+      risk_score/risk_level with the authoritative ClauseInput value
+      from Agent 2 before anything leaves Agent 3, so the value
+      produced here never reaches the final result for production calls.
+    - In standalone unit tests the mock LLM returns small integers
+      (e.g. 6).  Clamping 6 into 0-100 gives 6, which is correct.
+      The legacy 0-10 thresholds apply only in
+      calculate_overall_risk_score() / calculate_overall_risk_level(),
+      which are already isolated to the standalone-mode overall score
+      fallback path inside analyze().
+
+    Therefore a single 0-100 normaliser is safe here and removes any
+    need to guess the scale from the numeric value.
     """
 
     clause_id = safe_text(
@@ -245,17 +258,20 @@ def convert_analysis(
             "without clause_id."
         )
 
-    risk_score = normalize_risk_score(
-        raw_analysis.get(
-            "risk_score",
-            0,
-        )
+    # Always use the 0-100 normaliser.
+    # Scores that are genuinely small (0-10) survive unchanged because
+    # clamping them to [0, 100] does not alter their value.
+    risk_score = normalize_agent2_risk_score(
+        raw_analysis.get("risk_score", 0)
     )
 
-    risk_level = normalize_risk_level(
-        raw_analysis.get(
-            "risk_level"
-        ),
+    # Always use the Agent 2 level normaliser.
+    # For standalone tests the risk_level string ("low", "medium", …)
+    # is parsed first and returned directly, so the score-based
+    # fallback (which uses Agent 2 thresholds) is never reached for
+    # well-formed standalone responses.
+    risk_level = normalize_agent2_risk_level(
+        raw_analysis.get("risk_level"),
         risk_score,
     )
 

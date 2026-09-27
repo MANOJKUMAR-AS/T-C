@@ -150,7 +150,7 @@ class Agent3Config:
 
     max_risk_score: int = _get_int_env(
         "AGENT3_MAX_RISK_SCORE",
-        10,
+        100,
     )
 
     max_clauses: int = _get_int_env(

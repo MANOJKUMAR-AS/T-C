@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const API = "http://127.0.0.1:8001";
 
@@ -207,6 +207,390 @@ function ensureAgent3UI() {
         );
 
 }
+
+/* ============================================================
+ * FINAL COMPACT SUMMARY
+ * ========================================================== */
+
+function ensureFinalSummaryUI() {
+
+    let summary =
+        document.getElementById("finalSummary");
+
+    if (summary) {
+        return summary;
+    }
+
+    const actions =
+        document.querySelector(".actions");
+
+    if (!actions) {
+        return null;
+    }
+
+    summary =
+        document.createElement("section");
+
+    summary.id =
+        "finalSummary";
+
+    summary.className =
+        "panel final-summary-panel";
+
+    summary.innerHTML = `
+
+        <div class="hero">
+
+            <div>
+
+                <span class="eyebrow">
+                    FINAL RESULT
+                </span>
+
+                <h2>
+                    Terms & Conditions Risk
+                </h2>
+
+            </div>
+
+        </div>
+
+        <div class="meta">
+            Policies scraped:
+            <strong id="finalPolicyCount">
+                0
+            </strong>
+        </div>
+
+        <div class="risk-box">
+
+            <span>
+                OVERALL RISK
+            </span>
+
+            <strong id="finalRiskLevel">
+                ANALYZING
+            </strong>
+
+        </div>
+
+        <div class="meta">
+            Overall score:
+            <strong id="finalRiskScore">
+                0/100
+            </strong>
+        </div>
+
+    `;
+
+    actions.parentNode.insertBefore(
+        summary,
+        actions
+    );
+
+    return summary;
+}
+
+
+/* ============================================================
+ * HIDE INTERMEDIATE AGENT OUTPUT
+ * ========================================================== */
+
+function hideIntermediateAgentOutput() {
+
+    const hide =
+        id => {
+
+            const element =
+                document.getElementById(id);
+
+            if (element) {
+                element.style.display =
+                    "none";
+            }
+
+        };
+
+    // Agent 1 intermediate output
+    hide("agent1Status");
+    hide("policies");
+
+    // Agent 2 intermediate output
+    hide("agent2Status");
+    hide("overallRisk");
+    hide("keyFindings");
+    hide("clauseCount");
+    hide("clauses");
+
+}
+
+/* ============================================================
+ * PROFESSIONAL RISK VIEW
+ * ========================================================== */
+
+(function injectProfessionalRiskStyles() {
+
+    if (
+        document.getElementById(
+            "professionalRiskStyles"
+        )
+    ) {
+        return;
+    }
+
+
+    const style =
+        document.createElement(
+            "style"
+        );
+
+
+    style.id =
+        "professionalRiskStyles";
+
+
+    style.textContent = `
+
+        #professionalRiskView {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 18px 14px 24px;
+            font-family: inherit;
+        }
+
+
+        .professional-page-header {
+            margin-bottom: 18px;
+        }
+
+
+        .professional-eyebrow {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.4px;
+            opacity: 0.62;
+            margin-bottom: 5px;
+        }
+
+
+        .professional-page-header h2 {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.2;
+        }
+
+
+        .professional-page-header p {
+            margin: 7px 0 0;
+            font-size: 12px;
+            opacity: 0.62;
+        }
+
+
+        .professional-overall-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(0,0,0,0.10);
+            background: #ffffff;
+            margin-bottom: 24px;
+            box-sizing: border-box;
+        }
+
+
+        .professional-overall-card > div:first-child {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+
+        .professional-overall-card > div:first-child span {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            opacity: 0.58;
+        }
+
+
+        .professional-overall-card > div:first-child strong {
+            font-size: 25px;
+            line-height: 1;
+        }
+
+
+        .professional-overall-score {
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+        }
+
+
+        .professional-overall-score strong {
+            font-size: 28px;
+        }
+
+
+        .professional-overall-score span {
+            font-size: 12px;
+            opacity: 0.55;
+        }
+
+
+        .professional-section-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+
+        .professional-risk-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+
+        .professional-risk-card {
+            background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.10);
+            border-radius: 13px;
+            padding: 14px;
+            box-sizing: border-box;
+        }
+
+
+        .professional-risk-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+
+        .professional-risk-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: #eef1f5;
+        }
+
+
+        .professional-risk-badge.low {
+            background: #eef5ef;
+        }
+
+
+        .professional-risk-badge.medium {
+            background: #f6f1e5;
+        }
+
+
+        .professional-risk-badge.high {
+            background: #f7eaea;
+        }
+
+
+        .professional-risk-badge.critical {
+            background: #f4e6e6;
+        }
+
+
+        .professional-risk-score {
+            font-size: 12px;
+            font-weight: 700;
+            opacity: 0.68;
+        }
+
+
+        .professional-risk-card h3 {
+            margin: 0 0 5px;
+            font-size: 16px;
+            line-height: 1.25;
+        }
+
+
+        .professional-risk-type {
+            font-size: 11px;
+            opacity: 0.65;
+            margin-bottom: 9px;
+        }
+
+
+        .professional-risk-type strong {
+            opacity: 1;
+        }
+
+
+        .professional-risk-summary {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+
+        .professional-risk-details {
+            margin-top: 11px;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            padding-top: 9px;
+        }
+
+
+        .professional-risk-details summary {
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            list-style-position: inside;
+        }
+
+
+        .professional-detail-block {
+            margin-top: 12px;
+        }
+
+
+        .professional-detail-block span {
+            display: block;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            opacity: 0.55;
+            margin-bottom: 4px;
+        }
+
+
+        .professional-detail-block p {
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+
+        .professional-empty {
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            font-size: 13px;
+        }
+
+    `;
+
+
+    document.head.appendChild(
+        style
+    );
+
+})();
 
 /* ============================================================
  * STATE
@@ -661,6 +1045,15 @@ function renderPolicies(
 
     };
 
+    // Map policy types not shown in their own counter to "legal".
+    // background.js classifyPolicyUrl() can also produce:
+    // "returns", "payments", "promotions" — all displayed under Legal.
+    const TYPE_DISPLAY_MAP = {
+        returns:    "legal",
+        payments:   "legal",
+        promotions: "legal",
+    };
+
 
     els.policies.innerHTML =
         "";
@@ -677,12 +1070,17 @@ function renderPolicies(
             )
                 .toLowerCase();
 
+        // Resolve display category: "returns"/"payments"/"promotions"
+        // are shown under the "legal" counter.
+        const displayType =
+            TYPE_DISPLAY_MAP[type] ||
+            type;
 
         if (
-            counts[type] !== undefined
+            counts[displayType] !== undefined
         ) {
 
-            counts[type]++;
+            counts[displayType]++;
 
         }
 
@@ -901,9 +1299,9 @@ function renderAgent2(
                 ${escapeHtml(
                     riskLevel
                 )}
-                Â· score
+                &middot; score
                 ${riskScore}/100
-                Â·
+                &middot;
                 ${escapeHtml(
                     clause?.document_type ||
                     ""
@@ -1029,11 +1427,8 @@ function renderAgent3(result) {
 
     ensureAgent3UI();
 
-
     if (!els.agent3Status) {
-
         return;
-
     }
 
 
@@ -1043,16 +1438,12 @@ function renderAgent3(result) {
             : [];
 
 
-    const warnings =
-        Array.isArray(result?.warnings)
-            ? result.warnings
-            : [];
-
-
     const overallRisk =
-        result?.overall_risk_level ||
-        result?.overall_risk ||
-        "UNAVAILABLE";
+        String(
+            result?.overall_risk_level ||
+            result?.overall_risk ||
+            "UNAVAILABLE"
+        ).toUpperCase();
 
 
     const overallScore =
@@ -1064,184 +1455,540 @@ function renderAgent3(result) {
 
 
     const analyzedClauses =
-        result?.analyzed_clauses ??
-        analyses.length;
-
-
-    els.agent3Status.textContent =
-        result?.status ||
-        "Complete";
-
-
-    els.agent3OverallRisk.textContent =
-        String(
-            overallRisk
-        ).toUpperCase();
-
-
-    els.agent3OverallScore.textContent =
-        `${overallScore}/100`;
-
-
-    els.agent3ClauseCount.textContent =
-        String(
-            analyzedClauses
+        Number(
+            result?.analyzed_clauses ??
+            analyses.length
         );
 
 
-    els.agent3Warnings.innerHTML =
-        warnings.length
+    /*
+     * --------------------------------------------------------
+     * CREATE CLEAN USER-FACING RESULT VIEW
+     * --------------------------------------------------------
+     */
 
-            ? warnings
-                .map(
-                    warning =>
-                        `<li>${escapeHtml(warning)}</li>`
-                )
-                .join("")
-
-            : "<li>No additional warnings were returned.</li>";
-
-
-    els.agent3Analyses.innerHTML =
-        "";
+    let resultView =
+        document.getElementById(
+            "professionalRiskView"
+        );
 
 
-    for (
-        const analysis of analyses
-    ) {
+    if (!resultView) {
 
-        const card =
+        resultView =
             document.createElement(
-                "article"
+                "section"
+            );
+
+        resultView.id =
+            "professionalRiskView";
+
+        resultView.className =
+            "professional-risk-view";
+
+
+        /*
+         * Insert before the action buttons.
+         */
+
+        const actions =
+            document.querySelector(
+                ".actions"
             );
 
 
-        card.className =
-            "card";
+        if (actions) {
 
-
-        const title =
-            analysis?.title ||
-            analysis?.clause_title ||
-            analysis?.name ||
-            "Clause Analysis";
-
-
-        const category =
-            analysis?.category ||
-            analysis?.clause_category ||
-            analysis?.type ||
-            "General";
-
-
-        const riskLevel =
-            String(
-                analysis?.risk_level ||
-                analysis?.risk ||
-                "LOW"
-            ).toUpperCase();
-
-
-        const riskScore =
-            Number(
-                analysis?.risk_score ??
-                analysis?.score ??
-                0
+            actions.parentNode.insertBefore(
+                resultView,
+                actions
             );
 
+        } else {
 
-        const explanation =
-            analysis?.explanation ||
-            analysis?.plain_language ||
-            analysis?.summary ||
-            analysis?.what_it_means ||
-            "";
+            document.body.prepend(
+                resultView
+            );
 
-
-        const whyItMatters =
-            analysis?.why_it_matters ||
-            analysis?.reason ||
-            analysis?.risk_reason ||
-            "";
-
-
-        const sourceText =
-            analysis?.source_text ||
-            analysis?.clause_text ||
-            "";
-
-
-        card.innerHTML = `
-
-            <div class="clause-title">
-                ${escapeHtml(title)}
-            </div>
-
-            <div class="meta">
-                ${escapeHtml(category)}
-                ·
-                ${escapeHtml(riskLevel)}
-                · score
-                ${escapeHtml(riskScore)} /100
-            </div>
-
-            <div class="clause-label">
-                PLAIN-LANGUAGE EXPLANATION
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    explanation ||
-                    "No explanation returned."
-                )}
-            </div>
-
-            ${
-                whyItMatters
-                    ? `
-                        <div class="clause-label">
-                            WHY IT MATTERS
-                        </div>
-
-                        <div class="clause-text">
-                            ${escapeHtml(
-                                whyItMatters
-                            )}
-                        </div>
-                    `
-                    : ""
-            }
-
-            ${
-                sourceText
-                    ? `
-                        <div class="clause-label">
-                            SOURCE
-                        </div>
-
-                        <div class="clause-text">
-                            ${escapeHtml(
-                                sourceText
-                            )}
-                        </div>
-                    `
-                    : ""
-            }
-
-        `;
-
-
-        els.agent3Analyses.appendChild(
-            card
-        );
+        }
 
     }
 
 
-    if (!analyses.length) {
+    /*
+     * --------------------------------------------------------
+     * RISK LEVEL CLASS
+     * --------------------------------------------------------
+     */
 
-        els.agent3Analyses.innerHTML =
-            '<div class="card">No Agent 3 clause explanations were returned.</div>';
+    const riskClass =
+        overallRisk
+            .toLowerCase()
+            .replace(
+                /[^a-z]/g,
+                ""
+            );
+
+
+    /*
+     * --------------------------------------------------------
+     * FINDINGS
+     * --------------------------------------------------------
+     */
+
+    const findingsHtml =
+        analyses.map(
+            (analysis, index) => {
+
+                const riskLevel =
+                    String(
+                        analysis?.risk_level ||
+                        analysis?.risk ||
+                        "LOW"
+                    ).toUpperCase();
+
+
+                const riskScore =
+                    Number(
+                        analysis?.risk_score ??
+                        analysis?.score ??
+                        0
+                    );
+
+
+                const riskType =
+                    analysis?.category ||
+                    analysis?.clause_category ||
+                    analysis?.type ||
+                    "General";
+
+
+                const title =
+                    analysis?.title ||
+                    analysis?.clause_title ||
+                    analysis?.name ||
+                    "Policy clause";
+
+
+                const summary =
+                    analysis?.summary ||
+                    analysis?.plain_language ||
+                    analysis?.what_it_means ||
+                    analysis?.explanation ||
+                    "No summary available.";
+
+
+                const explanation =
+                    analysis?.explanation ||
+                    analysis?.plain_language ||
+                    analysis?.what_it_means ||
+                    "";
+
+
+                const whyItMatters =
+                    analysis?.why_it_matters ||
+                    analysis?.reason ||
+                    "";
+
+
+                const userImpact =
+                    analysis?.user_impact ||
+                    analysis?.impact ||
+                    "";
+
+
+                const recommendation =
+                    analysis?.recommendation ||
+                    "";
+
+
+                const evidence =
+                    analysis?.evidence ||
+                    analysis?.risk_reason ||
+                    "";
+
+
+                const safeId =
+                    `risk-detail-${index}`;
+
+
+                return `
+
+                    <article
+                        class="professional-risk-card"
+                    >
+
+                        <div
+                            class="professional-risk-header"
+                        >
+
+                            <span
+                                class="professional-risk-badge ${escapeHtml(riskLevel.toLowerCase())}"
+                            >
+                                ${escapeHtml(riskLevel)} RISK
+                            </span>
+
+                            <span
+                                class="professional-risk-score"
+                            >
+                                ${escapeHtml(riskScore)}/100
+                            </span>
+
+                        </div>
+
+
+                        <h3>
+                            ${escapeHtml(title)}
+                        </h3>
+
+
+                        <div
+                            class="professional-risk-type"
+                        >
+                            Risk type:
+                            <strong>
+                                ${escapeHtml(riskType)}
+                            </strong>
+                        </div>
+
+
+                        <p
+                            class="professional-risk-summary"
+                        >
+                            ${escapeHtml(summary)}
+                        </p>
+
+
+                        <details
+                            class="professional-risk-details"
+                            id="${safeId}"
+                        >
+
+                            <summary>
+                                View explanation
+                            </summary>
+
+
+                            ${
+                                explanation
+                                    ? `
+                                        <div class="professional-detail-block">
+
+                                            <span>
+                                                EXPLANATION
+                                            </span>
+
+                                            <p>
+                                                ${escapeHtml(
+                                                    explanation
+                                                )}
+                                            </p>
+
+                                        </div>
+                                    `
+                                    : ""
+                            }
+
+
+                            ${
+                                whyItMatters
+                                    ? `
+                                        <div class="professional-detail-block">
+
+                                            <span>
+                                                WHY IT MATTERS
+                                            </span>
+
+                                            <p>
+                                                ${escapeHtml(
+                                                    whyItMatters
+                                                )}
+                                            </p>
+
+                                        </div>
+                                    `
+                                    : ""
+                            }
+
+
+                            ${
+                                userImpact
+                                    ? `
+                                        <div class="professional-detail-block">
+
+                                            <span>
+                                                USER IMPACT
+                                            </span>
+
+                                            <p>
+                                                ${escapeHtml(
+                                                    userImpact
+                                                )}
+                                            </p>
+
+                                        </div>
+                                    `
+                                    : ""
+                            }
+
+
+                            ${
+                                recommendation
+                                    ? `
+                                        <div class="professional-detail-block">
+
+                                            <span>
+                                                WHAT TO CONSIDER
+                                            </span>
+
+                                            <p>
+                                                ${escapeHtml(
+                                                    recommendation
+                                                )}
+                                            </p>
+
+                                        </div>
+                                    `
+                                    : ""
+                            }
+
+
+                            ${
+                                evidence
+                                    ? `
+                                        <div class="professional-detail-block">
+
+                                            <span>
+                                                RISK REASON
+                                            </span>
+
+                                            <p>
+                                                ${escapeHtml(
+                                                    evidence
+                                                )}
+                                            </p>
+
+                                        </div>
+                                    `
+                                    : ""
+                            }
+
+                        </details>
+
+                    </article>
+
+                `;
+
+            }
+        ).join("");
+
+
+    /*
+     * --------------------------------------------------------
+     * POLICY COUNT
+     * --------------------------------------------------------
+     */
+
+    const policyCountElement =
+        document.getElementById(
+            "finalPolicyCount"
+        );
+
+
+    const policyCount =
+        policyCountElement
+            ? policyCountElement.textContent
+            : (
+                document.getElementById(
+                    "policyCount"
+                )?.textContent ||
+                "0"
+            );
+
+
+    /*
+     * --------------------------------------------------------
+     * FINAL VIEW
+     * --------------------------------------------------------
+     */
+
+    resultView.innerHTML = `
+
+        <div
+            class="professional-page-header"
+        >
+
+            <div>
+
+                <span
+                    class="professional-eyebrow"
+                >
+                    T&C ANALYZER
+                </span>
+
+                <h2>
+                    Terms & Conditions Risk
+                </h2>
+
+                <p>
+                    ${escapeHtml(
+                        policyCount
+                    )}
+                    policies analyzed
+                    ·
+                    ${escapeHtml(
+                        analyzedClauses
+                    )}
+                    risk findings
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div
+            class="professional-overall-card ${escapeHtml(riskClass)}"
+        >
+
+            <div>
+
+                <span>
+                    OVERALL RISK
+                </span>
+
+                <strong>
+                    ${escapeHtml(
+                        overallRisk
+                    )}
+                </strong>
+
+            </div>
+
+
+            <div
+                class="professional-overall-score"
+            >
+
+                <strong>
+                    ${escapeHtml(
+                        overallScore
+                    )}
+                </strong>
+
+                <span>
+                    /100
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <div
+            class="professional-section-title"
+        >
+            Risk Findings
+        </div>
+
+
+        <div
+            class="professional-risk-list"
+        >
+
+            ${
+                findingsHtml ||
+                `
+                    <div
+                        class="professional-empty"
+                    >
+                        No risk findings were returned.
+                    </div>
+                `
+            }
+
+        </div>
+
+    `;
+
+
+    /*
+     * --------------------------------------------------------
+     * HIDE ALL OLD AGENT OUTPUT
+     * --------------------------------------------------------
+     *
+     * Agent 1 and Agent 2 continue running, but their
+     * intermediate results are not presented to users.
+     */
+
+    const hideIds = [
+
+        "agent1Status",
+        "agent2Status",
+
+        "termsCount",
+        "privacyCount",
+        "cookiesCount",
+        "legalCount",
+
+        "policyCount",
+        "policies",
+
+        "overallRisk",
+        "keyFindings",
+        "clauseCount",
+        "clauses",
+
+        "agent3Status",
+        "agent3OverallRisk",
+        "agent3OverallScore",
+        "agent3ClauseCount",
+        "agent3Warnings",
+        "agent3Analyses"
+
+    ];
+
+
+    for (
+        const id of hideIds
+    ) {
+
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+
+            element.style.display =
+                "none";
+
+        }
+
+    }
+
+
+    /*
+     * Hide the old panels completely.
+     */
+
+    const panels =
+        document.querySelectorAll(
+            ".panel"
+        );
+
+
+    for (
+        const panel of panels
+    ) {
+
+        if (
+            panel !== resultView &&
+            !panel.contains(resultView)
+        ) {
+
+            panel.style.display =
+                "none";
+
+        }
 
     }
 
@@ -1584,7 +2331,8 @@ async function run() {
             {}
         );
 
-
+
+
 
         /* ----------------------------------------------------
          * STEP 6: AGENT 3
@@ -1803,4 +2551,3 @@ els.reanalyze.addEventListener(
     }
 
 })();
-

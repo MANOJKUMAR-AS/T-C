@@ -100,7 +100,9 @@ function collect() {
         browser_links: policies,
         browser_all_links: all,
         browser_documents: documents,
-        browser_page_text: pageText.slice(0, 100000),
+        // Limit matches background.js CONFIG.MAX_PAGE_TEXT (30000)
+        // to avoid sending data that will always be truncated.
+        browser_page_text: pageText.slice(0, 30000),
     };
 }
 

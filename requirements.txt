@@ -1,10 +1,15 @@
+# T&C Analyzer backend dependencies
+# Minimum version constraints based on tested runtime.
+# Run: pip install -r requirements.txt
+# After installing playwright, run: playwright install chromium
 
-fastapi
-uvicorn[standard]
-pydantic
-requests
-beautifulsoup4
-playwright
-python-dotenv
-google-genai
-pypdf
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+playwright>=1.40.0
+python-dotenv>=1.0.0
+google-genai>=1.0.0
+pypdf>=4.0.0
+httpx>=0.25.0

@@ -586,8 +586,11 @@ async function collectFromContentScript(
             await chrome.tabs.sendMessage(
                 tabId,
                 {
+                    // IMPORTANT:
+                    // Must match the action name in content.js
+                    // onMessage listener ("collectPolicyData").
                     action:
-                        "collectPolicyPage"
+                        "collectPolicyData"
                 }
             );
 

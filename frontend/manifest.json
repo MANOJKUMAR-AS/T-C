@@ -2,7 +2,7 @@
 {
   "manifest_version": 3,
   "name": "T&C Analyzer",
-  "version": "10.0.0",
+  "version": "12.0.0",
   "description": "Browser-first Terms, Privacy, Cookie and Legal policy analyzer.",
   "permissions": [
     "tabs",

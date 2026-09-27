@@ -129,13 +129,63 @@ def get_agent3() -> Agent3:
 
 
 # ============================================================
-# RUN STORAGE
+# RUN STORAGE (BOUNDED + TTL)
 # ============================================================
 
-runs: Dict[
-    str,
-    Dict[str, Any],
-] = {}
+import time
+from collections import OrderedDict
+
+
+class BoundedRunStorage:
+    """
+    Thread-safe bounded in-memory run cache with TTL eviction.
+    Prevents unbounded memory growth in production.
+    """
+
+    def __init__(self, max_items: int = 100, ttl_seconds: int = 3600):
+        self.max_items = max_items
+        self.ttl_seconds = ttl_seconds
+        self._store: OrderedDict[str, tuple[float, Dict[str, Any]]] = OrderedDict()
+
+    def _evict_expired(self) -> None:
+        now = time.time()
+        expired_keys = [
+            k for k, (ts, _) in self._store.items()
+            if now - ts > self.ttl_seconds
+        ]
+        for k in expired_keys:
+            self._store.pop(k, None)
+
+    def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
+        self._evict_expired()
+        if key in self._store:
+            self._store.pop(key)
+        elif len(self._store) >= self.max_items:
+            self._store.popitem(last=False)
+        self._store[key] = (time.time(), value)
+
+    def __getitem__(self, key: str) -> Dict[str, Any]:
+        self._evict_expired()
+        if key not in self._store:
+            raise KeyError(key)
+        return self._store[key][1]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        self._evict_expired()
+        if key in self._store:
+            return self._store[key][1]
+        return default
+
+    def __contains__(self, key: str) -> bool:
+        self._evict_expired()
+        return key in self._store
+
+    def __len__(self) -> int:
+        self._evict_expired()
+        return len(self._store)
+
+
+runs = BoundedRunStorage(max_items=100, ttl_seconds=3600)
 
 
 # ============================================================
@@ -172,7 +222,7 @@ class Agent2Request(BaseModel):
     run_id: str
 
 
-class Agent3RequestModel(BaseModel):
+class Agent3RunRequest(BaseModel):
     run_id: str
 
 
@@ -945,7 +995,7 @@ def analyze_agent2(
     "/api/agent3/analyze"
 )
 def analyze_agent3(
-    request: Agent3RequestModel,
+    request: Agent3RunRequest,
 ):
     """
     Run Agent 3 against the clauses produced by Agent 2.

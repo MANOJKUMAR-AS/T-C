@@ -31,26 +31,57 @@ class RiskLevel(str, Enum):
 # ============================================================
 
 class ClauseCategory(str, Enum):
-    """Categories understood by Agent 3."""
+    """
+    Categories understood by Agent 3.
 
-    DATA_PRIVACY = "data_privacy"
-    DATA_SHARING = "data_sharing"
-    DATA_RETENTION = "data_retention"
-    USER_CONTENT = "user_content"
-    PAYMENT = "payment"
+    The Agent 2 categories are included explicitly so that
+    authoritative Agent 2 classifications are preserved
+    instead of being silently converted to OTHER.
+    """
+
+    # --------------------------------------------------------
+    # Agent 2 categories
+    # --------------------------------------------------------
+
+    SUBSCRIPTION = "subscription"
     AUTO_RENEWAL = "auto_renewal"
     CANCELLATION = "cancellation"
+    PAYMENTS = "payments"
+    PRIVACY = "privacy"
+    DATA_COLLECTION = "data_collection"
+    DATA_SHARING = "data_sharing"
     REFUND = "refund"
+    INTELLECTUAL_PROPERTY = "intellectual_property"
+    LICENSE = "license"
     LIABILITY = "liability"
     INDEMNIFICATION = "indemnification"
     ARBITRATION = "arbitration"
-    GOVERNING_LAW = "governing_law"
-    INTELLECTUAL_PROPERTY = "intellectual_property"
-    ACCOUNT_TERMINATION = "account_termination"
+    TERMINATION = "termination"
+    TRACKING = "tracking"
     SECURITY = "security"
+    PROHIBITED_USE = "prohibited_use"
+
+    # --------------------------------------------------------
+    # Existing Agent 3 categories
+    #
+    # Keep these for backward compatibility with existing
+    # Agent 3 tests and standalone usage.
+    # --------------------------------------------------------
+
+    DATA_PRIVACY = "data_privacy"
+    DATA_RETENTION = "data_retention"
+    USER_CONTENT = "user_content"
+    PAYMENT = "payment"
+    GOVERNING_LAW = "governing_law"
+    ACCOUNT_TERMINATION = "account_termination"
     COOKIES = "cookies"
     THIRD_PARTY = "third_party"
     MARKETING = "marketing"
+
+    # --------------------------------------------------------
+    # Fallback
+    # --------------------------------------------------------
+
     OTHER = "other"
 
 
@@ -67,7 +98,7 @@ class ClauseInput:
     with the existing Agent 3 unit tests.
 
     In the production Agent 1 -> Agent 2 -> Agent 3 pipeline,
-    Agent 2 should supply these fields.
+    Agent 2 supplies these fields.
     """
 
     clause_id: str
@@ -226,12 +257,8 @@ class Agent3Request:
         return {
             "document_id": self.document_id,
             "document_title": self.document_title,
-            "overall_risk_score": (
-                self.overall_risk_score
-            ),
-            "overall_risk_level": (
-                self.overall_risk_level
-            ),
+            "overall_risk_score": self.overall_risk_score,
+            "overall_risk_level": self.overall_risk_level,
             "clauses": [
                 clause.to_dict()
                 for clause in self.clauses
@@ -247,6 +274,10 @@ class Agent3Request:
 class Agent3Response:
     """
     Complete response returned by Agent 3.
+
+    The response deliberately exposes both the native Agent 3
+    fields and compatibility aliases used by the wider backend
+    pipeline.
     """
 
     document_id: Optional[str]
@@ -269,23 +300,73 @@ class Agent3Response:
     )
 
     def to_dict(self) -> dict:
-        """Convert the response to a dictionary."""
+        """
+        Convert the response to a JSON-safe dictionary.
+
+        Compatibility fields are included so Agent 3 can be
+        consumed consistently with Agent 2.
+        """
+
+        risk_level = (
+            self.overall_risk_level.value
+        )
+
+        analyses = [
+            analysis.to_dict()
+            for analysis in self.analyses
+        ]
 
         return {
+            # ------------------------------------------------
+            # Explicit Agent 3 status
+            # ------------------------------------------------
+            "status": "complete",
+
+            # ------------------------------------------------
+            # Metadata
+            # ------------------------------------------------
             "document_id": self.document_id,
-            "overall_risk_level": (
-                self.overall_risk_level.value
-            ),
+
+            # ------------------------------------------------
+            # Canonical Agent 3 risk fields
+            # ------------------------------------------------
+            "overall_risk_level": risk_level,
             "overall_risk_score": (
-                self.overall_risk_score
+                int(self.overall_risk_score)
             ),
-            "total_clauses": self.total_clauses,
-            "analyzed_clauses": self.analyzed_clauses,
-            "warnings": self.warnings,
-            "analyses": [
-                analysis.to_dict()
-                for analysis in self.analyses
-            ],
+
+            # ------------------------------------------------
+            # Compatibility aliases
+            # ------------------------------------------------
+            "overall_risk": risk_level,
+            "clause_count": int(
+                self.total_clauses
+            ),
+
+            # ------------------------------------------------
+            # Coverage
+            # ------------------------------------------------
+            "total_clauses": int(
+                self.total_clauses
+            ),
+            "analyzed_clauses": int(
+                self.analyzed_clauses
+            ),
+
+            # ------------------------------------------------
+            # Diagnostics
+            # ------------------------------------------------
+            "warnings": list(
+                self.warnings
+            ),
+
+            # ------------------------------------------------
+            # Findings
+            # ------------------------------------------------
+            "analyses": analyses,
+
+            # Compatibility alias used by some consumers.
+            "risk_findings": analyses,
         }
 
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+from dataclasses import replace
 from typing import Any, List, Optional, Protocol
 
 from .config import (
@@ -144,6 +145,12 @@ class Agent3:
             ClauseAnalysis
         ] = []
 
+        # Track clause occurrences already consumed by earlier
+        # batches. Positions are used instead of clause IDs because
+        # duplicate IDs can occasionally appear in model output or
+        # upstream input.
+        assigned_clause_positions = set()
+
         warnings: List[str] = []
 
         # ----------------------------------------------------
@@ -173,6 +180,7 @@ class Agent3:
                         request=request,
                         batch_number=batch_number,
                         total_batches=len(batches),
+                        assigned_clause_positions=assigned_clause_positions,
                     )
                 )
 
@@ -421,6 +429,7 @@ class Agent3:
         request: Agent3Request,
         batch_number: int,
         total_batches: int,
+        assigned_clause_positions: set,
     ) -> List[ClauseAnalysis]:
         """
         Analyze one batch.
@@ -471,11 +480,358 @@ class Agent3:
             total_batches=total_batches,
         )
 
-        analyses = self._parse_analyses(
-            raw_response
+        analyses = self._parse_analyses_with_repair(
+            raw_response=raw_response,
+            original_user_prompt=user_prompt,
+            batch=batch,
+            batch_number=batch_number,
+        )
+
+        batch_start_index = (
+            (batch_number - 1) * self.BATCH_SIZE
+        )
+
+        analyses = self._rebind_batch_clause_ids(
+            analyses=analyses,
+            batch=batch,
+            batch_number=batch_number,
+            batch_start_index=batch_start_index,
+            assigned_clause_positions=assigned_clause_positions,
         )
 
         return analyses
+
+    # ========================================================
+    # JSON PARSING WITH ONE CONSTRAINED REPAIR
+    # ========================================================
+
+    def _parse_analyses_with_repair(
+        self,
+        raw_response: str,
+        original_user_prompt: str,
+        batch: List[ClauseInput],
+        batch_number: int,
+    ) -> List[ClauseAnalysis]:
+        """
+        Parse Gemini output and make one constrained repair attempt
+        if the first response contains malformed JSON.
+        """
+
+        try:
+            return self._parse_analyses(raw_response)
+
+        except ValueError as parse_error:
+            logger.warning(
+                "Agent 3 batch %d returned invalid JSON. "
+                "Attempting one constrained JSON repair. Error: %s",
+                batch_number,
+                parse_error,
+            )
+
+        repair_prompt = self._build_json_repair_prompt(
+            original_user_prompt=original_user_prompt,
+            raw_response=raw_response,
+            batch=batch,
+        )
+
+        repaired_response = self._call_llm(
+            user_prompt=repair_prompt,
+            batch_number=batch_number,
+            total_batches=batch_number,
+            temperature_override=0.0,
+            max_tokens_override=min(
+                self.config.max_tokens,
+                6000,
+            ),
+        )
+
+        try:
+            analyses = self._parse_analyses(
+                repaired_response
+            )
+        except ValueError as repair_error:
+            logger.exception(
+                "Agent 3 batch %d JSON repair failed.",
+                batch_number,
+            )
+            raise ValueError(
+                "Agent 3 returned malformed JSON and "
+                "the single constrained repair attempt "
+                "also returned invalid JSON."
+            ) from repair_error
+
+        if not analyses:
+            raise ValueError(
+                "Agent 3 JSON repair returned no valid analyses "
+                f"for batch {batch_number}."
+            )
+
+        return analyses
+
+    def _build_json_repair_prompt(
+        self,
+        original_user_prompt: str,
+        raw_response: str,
+        batch: List[ClauseInput],
+    ) -> str:
+        """
+        Build a narrowly scoped JSON-syntax repair request.
+
+        The model is instructed to preserve the existing response
+        and repair syntax only.
+        """
+
+        expected_ids = [
+            clause.clause_id
+            for clause in batch
+        ]
+
+        return f"""
+Repair the JSON syntax of the Agent 3 response below.
+
+This is a JSON repair task, NOT a new analysis task.
+
+STRICT RULES:
+
+1. Return ONLY valid JSON.
+2. Return a JSON object with an "analyses" array.
+3. Preserve every analysis that exists in the original response.
+4. Do NOT add an analysis.
+5. Do NOT remove an analysis.
+6. Do NOT rewrite, summarize, or improve explanations.
+7. Do NOT change clause_id values.
+8. Do NOT change category values.
+9. Do NOT change risk_level values.
+10. Do NOT change risk_score values.
+11. Do NOT change summary, explanation, user_impact,
+    recommendation, or evidence values.
+12. Fix ONLY JSON syntax errors such as missing commas,
+    missing colons, incorrect quotes, or unmatched brackets.
+13. Do not use Markdown fences.
+14. Do not include commentary outside the JSON object.
+15. The expected input clause IDs are:
+    {json.dumps(expected_ids, ensure_ascii=False)}
+
+The original analysis request was:
+
+--- ORIGINAL REQUEST ---
+{original_user_prompt}
+--- END ORIGINAL REQUEST ---
+
+The malformed model response was:
+
+--- MALFORMED RESPONSE ---
+{raw_response}
+--- END MALFORMED RESPONSE ---
+
+Return the repaired JSON object now.
+"""
+
+    # ========================================================
+    # CLAUSE ID REBINDING
+    # ========================================================
+
+    def _rebind_batch_clause_ids(
+        self,
+        analyses: List[ClauseAnalysis],
+        batch: List[ClauseInput],
+        batch_number: int,
+        batch_start_index: int,
+        assigned_clause_positions: set,
+    ) -> List[ClauseAnalysis]:
+        """
+        Associate every returned analysis with one input clause
+        occurrence.
+
+        Gemini is instructed to preserve clause IDs, but an LLM can
+        occasionally repeat an ID, return an ID from another batch,
+        or omit an ID. The previous implementation tracked consumed
+        clause IDs globally. That is unsafe when an ID is duplicated
+        upstream or when Gemini repeats an earlier ID, because a valid
+        current-batch occurrence could appear to be unavailable.
+
+        This implementation tracks the physical input-clause position
+        instead. Each input occurrence can therefore be consumed once,
+        even when two occurrences share the same clause_id.
+
+        Deterministic association order:
+
+        1. Preserve a returned ID when it matches an unused occurrence
+           in the current batch.
+        2. If that ID is already consumed or unknown, keep the analysis
+           pending.
+        3. Rebind pending analyses, in their original response order,
+           to the remaining unused input occurrences, also in input
+           order.
+        4. Never invent a new clause ID.
+        5. Never associate more analyses than there are input clauses.
+
+        No fuzzy matching, embeddings, semantic similarity, or model
+        calls are used here.
+        """
+
+        if not analyses:
+            return analyses
+
+        # Keep occurrence-level information so duplicate clause IDs
+        # are handled safely.
+        expected_occurrences = [
+            (
+                batch_start_index + local_index,
+                clause.clause_id,
+            )
+            for local_index, clause in enumerate(batch)
+            if clause.clause_id
+        ]
+
+        if not expected_occurrences:
+            return analyses
+
+        normalized: List[ClauseAnalysis] = []
+        pending: List[ClauseAnalysis] = []
+
+        # ----------------------------------------------------
+        # First pass:
+        # Match returned IDs to an unused occurrence in the
+        # current batch. Search in input order so the result is
+        # deterministic.
+        # ----------------------------------------------------
+        used_local_positions = set()
+
+        for analysis in analyses:
+            returned_id = str(
+                analysis.clause_id or ""
+            ).strip()
+
+            matching_occurrence = None
+
+            for global_position, expected_id in expected_occurrences:
+                if global_position in assigned_clause_positions:
+                    continue
+
+                if global_position in used_local_positions:
+                    continue
+
+                if returned_id == expected_id:
+                    matching_occurrence = (
+                        global_position,
+                        expected_id,
+                    )
+                    break
+
+            if matching_occurrence is None:
+                pending.append(analysis)
+                continue
+
+            global_position, matched_id = (
+                matching_occurrence
+            )
+
+            used_local_positions.add(
+                global_position
+            )
+            assigned_clause_positions.add(
+                global_position
+            )
+
+            normalized.append(
+                analysis
+            )
+
+        # ----------------------------------------------------
+        # Remaining input occurrences.
+        # ----------------------------------------------------
+        unused_occurrences = [
+            (
+                global_position,
+                expected_id,
+            )
+            for global_position, expected_id
+            in expected_occurrences
+            if (
+                global_position
+                not in assigned_clause_positions
+            )
+            and (
+                global_position
+                not in used_local_positions
+            )
+        ]
+
+        # ----------------------------------------------------
+        # Rebind duplicate, cross-batch, unknown, or missing IDs.
+        #
+        # Response order is preserved for pending analyses and
+        # input order is preserved for replacement occurrences.
+        # ----------------------------------------------------
+        for analysis, (
+            replacement_position,
+            replacement_id,
+        ) in zip(
+            pending,
+            unused_occurrences,
+        ):
+            old_id = str(
+                analysis.clause_id or ""
+            ).strip()
+
+            logger.warning(
+                "Agent 3 repaired clause ID in batch %d: "
+                "%s -> %s "
+                "(input_position=%d)",
+                batch_number,
+                old_id or "<missing>",
+                replacement_id,
+                replacement_position,
+            )
+
+            repaired = replace(
+                analysis,
+                clause_id=replacement_id,
+            )
+
+            normalized.append(
+                repaired
+            )
+
+            assigned_clause_positions.add(
+                replacement_position
+            )
+            used_local_positions.add(
+                replacement_position
+            )
+
+        # ----------------------------------------------------
+        # If Gemini returned more analyses than the number of
+        # input occurrences still available, the extras cannot
+        # be safely associated with a clause and are dropped.
+        # ----------------------------------------------------
+        if len(pending) > len(unused_occurrences):
+            logger.warning(
+                "Agent 3 returned %d extra analyses in batch %d "
+                "that could not be associated with input clauses.",
+                len(pending) - len(unused_occurrences),
+                batch_number,
+            )
+
+        # ----------------------------------------------------
+        # Safety invariant:
+        # Never return more analyses than the input batch size.
+        # ----------------------------------------------------
+        if len(normalized) > len(expected_occurrences):
+            logger.warning(
+                "Agent 3 batch %d produced %d analyses for "
+                "%d input clause occurrences. Truncating extras.",
+                batch_number,
+                len(normalized),
+                len(expected_occurrences),
+            )
+            normalized = normalized[
+                :len(expected_occurrences)
+            ]
+
+        return normalized
+
 
     # ========================================================
     # SERIALIZATION
@@ -509,6 +865,8 @@ class Agent3:
         user_prompt: str,
         batch_number: int = 1,
         total_batches: int = 1,
+        temperature_override: Optional[float] = None,
+        max_tokens_override: Optional[int] = None,
     ) -> str:
         """
         Call the configured LLM.
@@ -545,10 +903,14 @@ class Agent3:
                 "system_prompt": SYSTEM_PROMPT,
                 "user_prompt": user_prompt,
                 "temperature": (
-                    self.config.temperature
+                    temperature_override
+                    if temperature_override is not None
+                    else self.config.temperature
                 ),
                 "max_tokens": (
-                    self.config.max_tokens
+                    max_tokens_override
+                    if max_tokens_override is not None
+                    else self.config.max_tokens
                 ),
             }
 

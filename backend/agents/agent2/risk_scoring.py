@@ -365,10 +365,6 @@ WEIGHTS = {
 
 TEXT_RULES = {
 
-    # ========================================================
-    # PRIVACY
-    # ========================================================
-
     "personal_data_collection": [
         r"\bwe collect\b",
         r"\bcollect(?:s|ed|ing)?\b.{0,180}\b(?:personal|user|customer)\b.{0,120}\b(?:data|information)\b",
@@ -475,10 +471,6 @@ TEXT_RULES = {
         r"\bemployment information\b",
     ],
 
-    # ========================================================
-    # TRACKING
-    # ========================================================
-
     "cookie_tracking": [
         r"\bcookies?\b",
         r"\bcookie identifiers?\b",
@@ -543,10 +535,6 @@ TEXT_RULES = {
         r"\binteraction tracking\b",
     ],
 
-    # ========================================================
-    # ADVERTISING
-    # ========================================================
-
     "advertising_targeting": [
         r"\btargeted advertising\b",
         r"\btargeted ads?\b",
@@ -582,10 +570,6 @@ TEXT_RULES = {
         r"\badvertising partners?\b",
         r"\badvertising partner\b.{0,150}\bdata\b",
     ],
-
-    # ========================================================
-    # SHARING
-    # ========================================================
 
     "third_party_data_sharing": [
         r"\bshare(?:s|d|ing)?\b.{0,180}\bthird[- ]part(?:y|ies)\b",
@@ -633,10 +617,6 @@ TEXT_RULES = {
         r"\blegal request\b",
     ],
 
-    # ========================================================
-    # RETENTION
-    # ========================================================
-
     "data_retention": [
         r"\bretain(?:s|ed|ing)?\b.{0,150}\b(?:data|information)\b",
         r"\bdata retention\b",
@@ -678,10 +658,6 @@ TEXT_RULES = {
         r"\bbackups?\b.{0,100}\bretain\b",
         r"\bretained in backup\b",
     ],
-
-    # ========================================================
-    # CONSENT
-    # ========================================================
 
     "unfriendly_consent_or_opt_out": [
         r"\bopt[- ]out\b",
@@ -727,10 +703,6 @@ TEXT_RULES = {
         r"\bmarketing consent\b",
     ],
 
-    # ========================================================
-    # AUTOMATION
-    # ========================================================
-
     "automated_decision_making": [
         r"\bautomated decision\b",
         r"\bautomated decisions\b",
@@ -759,10 +731,6 @@ TEXT_RULES = {
         r"\brecommendations based on\b",
     ],
 
-    # ========================================================
-    # COMMUNICATION MONITORING
-    # ========================================================
-
     "communication_monitoring": [
         r"\bmonitor(?:s|ing)?\b.{0,100}\bcommunications?\b",
         r"\bmonitor(?:s|ing)?\b.{0,100}\bmessages?\b",
@@ -782,10 +750,6 @@ TEXT_RULES = {
         r"\bmonitor(?:s|ing)?\b.{0,100}\bcontent\b",
         r"\breview\b.{0,100}\buser content\b",
     ],
-
-    # ========================================================
-    # SECURITY
-    # ========================================================
 
     "security_disclaimer": [
         r"\bno method of transmission\b",
@@ -821,10 +785,6 @@ TEXT_RULES = {
         r"\baccount credentials\b",
         r"\baccount password\b",
     ],
-
-    # ========================================================
-    # ACCOUNT
-    # ========================================================
 
     "account_termination": [
         r"\bterminate\b.{0,120}\b(?:account|access|service)\b",
@@ -872,10 +832,6 @@ TEXT_RULES = {
         r"\bsuspend\b.{0,100}\bwithout notice\b",
     ],
 
-    # ========================================================
-    # ELIGIBILITY
-    # ========================================================
-
     "age_restriction": [
         r"\bmust be at least\b.{0,50}\byears old\b",
         r"\bunder the age of\b",
@@ -893,10 +849,6 @@ TEXT_RULES = {
         r"\bparental consent\b",
         r"\bguardian consent\b",
     ],
-
-    # ========================================================
-    # USER CONDUCT
-    # ========================================================
 
     "prohibited_use": [
         r"\bprohibited uses?\b",
@@ -960,10 +912,6 @@ TEXT_RULES = {
         r"\babuse\b.{0,100}\bservice\b",
         r"\bthreaten\b.{0,100}\busers?\b",
     ],
-
-    # ========================================================
-    # PAYMENT
-    # ========================================================
 
     "payment_obligation": [
         r"\byou agree to pay\b",
@@ -1042,10 +990,6 @@ TEXT_RULES = {
         r"\bapplicable taxes\b",
     ],
 
-    # ========================================================
-    # REFUNDS / RETURNS
-    # ========================================================
-
     "cancellation_restriction": [
         r"\bcancell?ation\b.{0,120}\b(?:not permitted|restriction|fee)\b",
         r"\bcannot cancel\b",
@@ -1095,10 +1039,6 @@ TEXT_RULES = {
         r"\breturn\b.{0,150}\boriginal packaging\b",
         r"\breturn\b.{0,150}\bwithin\b.{0,50}\bdays\b",
     ],
-
-    # ========================================================
-    # E-COMMERCE
-    # ========================================================
 
     "delivery_disclaimer": [
         r"\bdelivery\b.{0,150}\bnot guaranteed\b",
@@ -1160,10 +1100,6 @@ TEXT_RULES = {
         r"\bguarantee\b.{0,100}\bexcluded\b",
         r"\bguarantee limitations?\b",
     ],
-
-    # ========================================================
-    # LIABILITY
-    # ========================================================
 
     "liability_limitation": [
         r"\blimitation of liability\b",
@@ -1237,10 +1173,6 @@ TEXT_RULES = {
         r"\bmake no guarantees?\b",
     ],
 
-    # ========================================================
-    # INDEMNIFICATION
-    # ========================================================
-
     "indemnification": [
         r"\bindemnif(?:y|ies|ied|ication)\b",
         r"\bhold harmless\b",
@@ -1256,10 +1188,6 @@ TEXT_RULES = {
         r"\bobligation to defend\b",
         r"\bdefend\b.{0,100}\bclaims\b",
     ],
-
-    # ========================================================
-    # DISPUTES
-    # ========================================================
 
     "mandatory_arbitration": [
         r"\bbinding arbitration\b",
@@ -1305,10 +1233,6 @@ TEXT_RULES = {
         r"\bgoverning law\b",
         r"\blaws of the state\b",
     ],
-
-    # ========================================================
-    # USER CONTENT
-    # ========================================================
 
     "broad_user_content_license": [
         r"\blicense\b.{0,150}\buser content\b",
@@ -1358,10 +1282,6 @@ TEXT_RULES = {
         r"\breview\b.{0,100}\buser content\b",
     ],
 
-    # ========================================================
-    # IP
-    # ========================================================
-
     "intellectual_property_restriction": [
         r"\bintellectual property rights\b",
         r"\bintellectual property\b.{0,100}\brestriction\b",
@@ -1387,10 +1307,6 @@ TEXT_RULES = {
         r"\blicense\b.{0,100}\bterminate\b",
         r"\blicense terminates?\b",
     ],
-
-    # ========================================================
-    # POLICY CHANGES
-    # ========================================================
 
     "unilateral_policy_changes": [
         r"\bmay change these terms\b",
@@ -1421,10 +1337,6 @@ TEXT_RULES = {
         r"\bchanges apply retroactively\b",
     ],
 
-    # ========================================================
-    # INTERNATIONAL / EXPORT
-    # ========================================================
-
     "international_data_transfer": [
         r"\binternational transfer\b",
         r"\bdata transferred internationally\b",
@@ -1448,10 +1360,6 @@ TEXT_RULES = {
         r"\btrade sanctions\b",
     ],
 
-    # ========================================================
-    # CONFIDENTIALITY
-    # ========================================================
-
     "confidentiality_obligation": [
         r"\bconfidential information\b",
         r"\bconfidentiality\b",
@@ -1466,10 +1374,6 @@ TEXT_RULES = {
         r"\bconfidentiality\b.{0,100}\bsurvive\b",
         r"\bconfidential obligations\b.{0,100}\btermination\b",
     ],
-
-    # ========================================================
-    # AUDIT
-    # ========================================================
 
     "audit_right": [
         r"\bright to audit\b",
@@ -1486,10 +1390,6 @@ TEXT_RULES = {
         r"\bright to verify\b",
         r"\bverification rights?\b",
     ],
-
-    # ========================================================
-    # THIRD PARTY SERVICES
-    # ========================================================
 
     "third_party_service_dependency": [
         r"\bthird[- ]party services?\b",
@@ -1511,10 +1411,6 @@ TEXT_RULES = {
         r"\blinks to third[- ]party websites\b",
     ],
 
-    # ========================================================
-    # FORCE MAJEURE
-    # ========================================================
-
     "force_majeure": [
         r"\bforce majeure\b",
         r"\bevents beyond our control\b",
@@ -1532,10 +1428,6 @@ TEXT_RULES = {
         r"\bwe are not responsible\b.{0,100}\binterruption\b",
     ],
 
-    # ========================================================
-    # MISC
-    # ========================================================
-
     "survival_of_obligations": [
         r"\bsurvive termination\b",
         r"\bsurvival of\b",
@@ -1551,7 +1443,6 @@ TEXT_RULES = {
         r"\bwaive any rights\b",
     ],
 
-    # Neutral classifications
     "acceptance_of_terms": [
         r"\bby accessing or using\b.{0,120}\bagree\b",
         r"\bby using\b.{0,120}\bagree to\b",
@@ -1597,8 +1488,7 @@ def _normalize_factors(
         ).strip().lower()
 
         if key in WEIGHTS and key not in valid:
-            if key not in valid:
-                valid.append(key)
+            valid.append(key)
 
     return valid
 
@@ -1683,12 +1573,6 @@ def score_clause(
 
     # --------------------------------------------------------
     # Avoid double-counting closely related factors.
-    #
-    # Example:
-    # behavioral_advertising + advertising_targeting
-    #
-    # Both can be valid, but we don't want dozens of synonyms
-    # to artificially create CRITICAL risk.
     # --------------------------------------------------------
 
     factor_groups = [
@@ -1731,14 +1615,6 @@ def score_clause(
         },
     ]
 
-    # --------------------------------------------------------
-    # Score all matched factors.
-    #
-    # Within a related group, retain the strongest factor
-    # plus one additional factor when it represents a
-    # genuinely different user impact.
-    # --------------------------------------------------------
-
     selected = list(factors)
 
     for group in factor_groups:
@@ -1761,11 +1637,10 @@ def score_clause(
         )
 
         for factor in matched:
+
             if factor == strongest:
                 continue
 
-            # Keep a second factor only when it describes
-            # a materially different consequence.
             if factor in {
                 "consequential_damage_exclusion",
                 "damage_cap",
@@ -1781,14 +1656,29 @@ def score_clause(
 
     factors = selected
 
+    # --------------------------------------------------------
+    # Calculate risk score.
+    #
+    # Every substantive/classified clause gets a minimum
+    # user-facing score of 5/100.
+    #
+    # This prevents neutral clauses from appearing as
+    # "0/100" while preserving all existing risk scores.
+    # --------------------------------------------------------
+
+    raw_score = sum(
+        WEIGHTS.get(
+            factor,
+            0,
+        )
+        for factor in factors
+    )
+
     score = min(
         100,
-        sum(
-            WEIGHTS.get(
-                factor,
-                0,
-            )
-            for factor in factors
+        max(
+            5,
+            raw_score,
         ),
     )
 
@@ -1852,6 +1742,7 @@ def overall_score(
     #
     # This prevents a long policy with dozens of harmless
     # clauses from becoming artificially HIGH.
+
     top = [
         score
         for score in scores[:5]
@@ -1885,5 +1776,3 @@ def level_for_score(
         return "MEDIUM"
 
     return "LOW"
-
-    
