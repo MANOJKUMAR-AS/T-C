@@ -1,115 +1,257 @@
-
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>T&C Analyzer</title>
-    <link rel="stylesheet" href="popup.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T&amp;C Analyzer</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <main class="app">
-        <header>
-            <div>
-                <h1>T&C Analyzer</h1>
-                <p id="pageTitle">Current webpage</p>
-            </div>
-            <span id="connectionStatus" class="status">Checking...</span>
-        </header>
+  <div id="app">
 
-        <section class="hero">
-            <div>
-                <span class="eyebrow">AGENT 1</span>
-                <h2>Policy Discovery</h2>
-            </div>
-            <span id="agent1Status" class="status">Waiting</span>
-        </section>
-
-        <div class="categories">
-            <div><b>T</b><span>Terms</span><strong id="termsCount">0</strong></div>
-            <div><b>P</b><span>Privacy</span><strong id="privacyCount">0</strong></div>
-            <div><b>C</b><span>Cookies</span><strong id="cookiesCount">0</strong></div>
-            <div><b>L</b><span>Legal</span><strong id="legalCount">0</strong></div>
+    <!-- ======================================================
+         STATE: IDLE
+         ====================================================== -->
+    <div id="state-idle" class="state" aria-live="polite">
+      <div class="idle-inner">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="22" height="22" rx="6" fill="#18243a"/>
+              <path d="M6 7h10M6 11h7M6 15h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-name">T&amp;C Analyzer</span>
         </div>
 
-        <section>
-            <div class="section-head">
-                <h2>Agent 1 Results</h2>
-                <span id="policyCount">0 results</span>
-            </div>
-            <div id="policies"></div>
-        </section>
-
-        <section>
-            <div class="hero">
-                <div>
-                    <span class="eyebrow">AGENT 2</span>
-                    <h2>Clause Analysis</h2>
-                </div>
-                <span id="agent2Status" class="status">Waiting</span>
-            </div>
-
-            <div class="risk-box">
-                <span>OVERALL RISK</span>
-                <strong id="overallRisk">UNAVAILABLE</strong>
-            </div>
-
-            <h2>Key Findings</h2>
-            <ul id="keyFindings">
-                <li>Agent 2 will start after Agent 1 completes.</li>
-            </ul>
-
-            <div class="section-head">
-                <h2>Clauses</h2>
-                <span id="clauseCount">0</span>
-            </div>
-            <div id="clauses"></div>
-        </section>
-
-        <section class="panel agent3-panel">
-            <div class="hero">
-                <div>
-                    <span class="eyebrow">AGENT 3</span>
-                    <h2>Plain-Language Explanation</h2>
-                </div>
-                <span id="agent3Status" class="status">Waiting</span>
-            </div>
-
-            <div class="risk-box">
-                <span>AGENT 3 RISK</span>
-                <strong id="agent3OverallRisk">UNAVAILABLE</strong>
-            </div>
-
-            <div class="meta">
-                Overall score:
-                <strong id="agent3OverallScore">0/100</strong>
-                &nbsp;·&nbsp;
-                Clauses analyzed:
-                <strong id="agent3ClauseCount">0</strong>
-            </div>
-
-            <h2>Warnings</h2>
-            <ul id="agent3Warnings">
-                <li>Agent 3 will explain clauses after Agent 2 completes.</li>
-            </ul>
-
-            <div class="section-head">
-                <h2>Explanations</h2>
-            </div>
-            <div id="agent3Analyses"></div>
-        </section>
-
-        <div class="actions">
-            <button id="analyze">Run Analysis</button>
-            <button id="reanalyze">Run Again</button>
+        <div class="idle-hero">
+          <h1 class="idle-title">Terms &amp; Conditions Analyzer</h1>
+          <p class="idle-desc">Analyze this page to understand important terms, policies, and risks.</p>
         </div>
 
-        <footer>
-            <span>Agent 1 · Browser extraction</span>
-            <span>Agent 2 · Clause analysis</span>
-            <span>Local backend</span>
-        </footer>
-    </main>
-    <script src="popup.js"></script>
+        <div id="idle-page-info" class="idle-page-info" aria-live="polite"></div>
+
+        <div id="idle-error" class="idle-error" role="alert" hidden></div>
+
+        <button id="btn-analyze" class="btn-primary" type="button">
+          Analyze Page
+        </button>
+      </div>
+    </div>
+
+    <!-- ======================================================
+         STATE: EXTRACTING (Agent 1)
+         ====================================================== -->
+    <div id="state-extracting" class="state" hidden aria-live="polite" aria-label="Extracting policies">
+      <div class="progress-header">
+        <div class="brand brand-sm">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="22" height="22" rx="6" fill="#18243a"/>
+              <path d="M6 7h10M6 11h7M6 15h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-name">T&amp;C Analyzer</span>
+        </div>
+        <h2 class="progress-title">Analyzing this page</h2>
+        <p class="progress-subtitle">Extracting policies and terms</p>
+      </div>
+
+      <div class="progress-pulse" aria-hidden="true">
+        <span class="pulse-dot"></span>
+        <span class="pulse-dot"></span>
+        <span class="pulse-dot"></span>
+      </div>
+
+      <ol class="progress-steps" aria-label="Extraction progress">
+        <li id="step-scrape" class="step step-pending">
+          <span class="step-indicator" aria-hidden="true"></span>
+          <span class="step-label">Scraping page</span>
+        </li>
+        <li id="step-detect" class="step step-pending">
+          <span class="step-indicator" aria-hidden="true"></span>
+          <span class="step-label">Detecting policy documents</span>
+        </li>
+        <li id="step-extract" class="step step-pending">
+          <span class="step-indicator" aria-hidden="true"></span>
+          <span class="step-label">Extracting content</span>
+        </li>
+      </ol>
+    </div>
+
+    <!-- ======================================================
+         STATE: EXTRACTION COMPLETE
+         ====================================================== -->
+    <div id="state-extracted" class="state" hidden aria-live="polite">
+      <div class="progress-header">
+        <div class="brand brand-sm">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="22" height="22" rx="6" fill="#18243a"/>
+              <path d="M6 7h10M6 11h7M6 15h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-name">T&amp;C Analyzer</span>
+        </div>
+        <h2 class="progress-title">Documents Extracted</h2>
+      </div>
+
+      <div id="doc-summary" class="doc-summary" aria-label="Extracted documents"></div>
+    </div>
+
+    <!-- ======================================================
+         STATE: ANALYZING (Agent 2 + Agent 3)
+         ====================================================== -->
+    <div id="state-analyzing" class="state" hidden aria-live="polite" aria-label="Analyzing policies">
+      <div class="progress-header">
+        <div class="brand brand-sm">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="22" height="22" rx="6" fill="#18243a"/>
+              <path d="M6 7h10M6 11h7M6 15h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-name">T&amp;C Analyzer</span>
+        </div>
+        <h2 class="progress-title">Analyzing policies</h2>
+        <p class="progress-subtitle">Classifying clauses and assessing potential risk</p>
+      </div>
+
+      <div class="progress-pulse" aria-hidden="true">
+        <span class="pulse-dot"></span>
+        <span class="pulse-dot"></span>
+        <span class="pulse-dot"></span>
+      </div>
+
+      <ol class="progress-steps" aria-label="Analysis progress">
+        <li id="step-clauses" class="step step-active">
+          <span class="step-indicator" aria-hidden="true"></span>
+          <span class="step-label">Reviewing policy clauses</span>
+        </li>
+        <li id="step-risk" class="step step-pending">
+          <span class="step-indicator" aria-hidden="true"></span>
+          <span class="step-label">Assessing risk</span>
+        </li>
+        <li id="step-explain" class="step step-pending">
+          <span class="step-indicator" aria-hidden="true"></span>
+          <span class="step-label">Generating plain-language summary</span>
+        </li>
+      </ol>
+    </div>
+
+    <!-- ======================================================
+         STATE: FINAL RESULT (Agent 3)
+         ====================================================== -->
+    <div id="state-result" class="state" hidden>
+
+      <!-- Header bar -->
+      <div class="result-header">
+        <div class="brand brand-sm">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="22" height="22" rx="6" fill="#18243a"/>
+              <path d="M6 7h10M6 11h7M6 15h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-name">T&amp;C Analyzer</span>
+        </div>
+        <button id="btn-reanalyze" class="btn-ghost btn-sm" type="button" aria-label="Run analysis again">
+          Analyze again
+        </button>
+      </div>
+
+      <!-- Overall risk card -->
+      <div id="risk-card" class="risk-card" aria-label="Overall risk">
+        <div class="risk-card-label">Risk Analysis</div>
+        <div class="risk-card-body">
+          <span id="result-risk-level" class="risk-level-badge" aria-label="Risk level"></span>
+          <div class="risk-score-block">
+            <span id="result-risk-score" class="risk-score-number" aria-label="Risk score"></span>
+            <span class="risk-score-denom">/&nbsp;100</span>
+          </div>
+        </div>
+        <div class="risk-card-sub">Overall Risk</div>
+      </div>
+
+      <!-- Clause counts summary -->
+      <div class="clause-summary" aria-label="Clause breakdown">
+        <div class="clause-summary-label">Clause Summary</div>
+        <div class="clause-summary-counts">
+          <div class="clause-count-row">
+            <span class="count-label count-label-high">
+              <span class="count-dot count-dot-high" aria-hidden="true"></span>
+              HIGH
+            </span>
+            <span id="count-high" class="count-num" aria-label="High risk clauses">0</span>
+          </div>
+          <div class="clause-count-row">
+            <span class="count-label count-label-medium">
+              <span class="count-dot count-dot-medium" aria-hidden="true"></span>
+              MEDIUM
+            </span>
+            <span id="count-medium" class="count-num" aria-label="Medium risk clauses">0</span>
+          </div>
+          <div class="clause-count-row">
+            <span class="count-label count-label-low">
+              <span class="count-dot count-dot-low" aria-hidden="true"></span>
+              LOW
+            </span>
+            <span id="count-low" class="count-num" aria-label="Low risk clauses">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk navigation tabs -->
+      <div class="risk-nav" role="tablist" aria-label="Risk category">
+        <button id="tab-high" class="risk-tab" role="tab" aria-selected="true" aria-controls="clause-panel" data-risk="high" type="button">
+          HIGH <span id="tab-count-high" class="tab-count">0</span>
+        </button>
+        <button id="tab-medium" class="risk-tab" role="tab" aria-selected="false" aria-controls="clause-panel" data-risk="medium" type="button">
+          MEDIUM <span id="tab-count-medium" class="tab-count">0</span>
+        </button>
+        <button id="tab-low" class="risk-tab" role="tab" aria-selected="false" aria-controls="clause-panel" data-risk="low" type="button">
+          LOW <span id="tab-count-low" class="tab-count">0</span>
+        </button>
+      </div>
+
+      <!-- Active category heading -->
+      <div id="clause-category-heading" class="clause-category-heading" aria-live="polite"></div>
+
+      <!-- Clause list panel -->
+      <div id="clause-panel" class="clause-panel" role="tabpanel" aria-label="Clauses"></div>
+
+      <!-- Doc context (compact) -->
+      <div id="result-doc-context" class="result-doc-context" aria-label="Document context"></div>
+
+    </div>
+
+    <!-- ======================================================
+         STATE: ERROR
+         ====================================================== -->
+    <div id="state-error" class="state" hidden aria-live="assertive" role="alert">
+      <div class="error-inner">
+        <div class="brand brand-sm">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="22" height="22" rx="6" fill="#18243a"/>
+              <path d="M6 7h10M6 11h7M6 15h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-name">T&amp;C Analyzer</span>
+        </div>
+        <div class="error-icon" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="15" stroke="#c0392b" stroke-width="2"/>
+            <path d="M16 9v9M16 22v1" stroke="#c0392b" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2 id="error-title" class="error-title"></h2>
+        <p id="error-desc" class="error-desc"></p>
+        <button id="btn-retry" class="btn-primary" type="button">Try Again</button>
+      </div>
+    </div>
+
+  </div><!-- /#app -->
+  <script src="popup.js"></script>
 </body>
 </html>

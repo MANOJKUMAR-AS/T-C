@@ -1,2553 +1,1082 @@
 "use strict";
 
+// ============================================================
+// T&C ANALYZER – POPUP CONTROLLER
+//
+// State machine: IDLE → EXTRACTING → EXTRACTED → ANALYZING → RESULT | ERROR
+//
+// Message contracts (must not change):
+//   chrome.runtime.sendMessage({ action: "collectPolicyData", tabId })
+//   POST /api/agent1/analyze
+//   POST /api/agent2/analyze  { run_id }
+//   POST /api/agent3/analyze  { run_id }
+//
+// Only Agent 3 final output is displayed to the user.
+// Agent 1 policy-type counts are shown as compact context.
+// Agent 2 output is never exposed.
+// ============================================================
+
 const API = "http://127.0.0.1:8001";
 
-const $ = id => document.getElementById(id);
-
-const els = {
-    pageTitle: $("pageTitle"),
-    connectionStatus: $("connectionStatus"),
-    agent1Status: $("agent1Status"),
-    agent2Status: $("agent2Status"),
-
-    termsCount: $("termsCount"),
-    privacyCount: $("privacyCount"),
-    cookiesCount: $("cookiesCount"),
-    legalCount: $("legalCount"),
-
-    policyCount: $("policyCount"),
-    policies: $("policies"),
-
-    overallRisk: $("overallRisk"),
-    keyFindings: $("keyFindings"),
-    clauseCount: $("clauseCount"),
-    clauses: $("clauses"),
-
-    analyze: $("analyze"),
-    reanalyze: $("reanalyze"),
-};
-
-
-
-/* ============================================================
- * AGENT 3 UI
- * ========================================================== */
-
-function ensureAgent3UI() {
-
-    let status =
-        document.getElementById("agent3Status");
-
-    if (status) {
-
-        els.agent3Status =
-            status;
-
-        els.agent3OverallRisk =
-            document.getElementById("agent3OverallRisk");
-
-        els.agent3OverallScore =
-            document.getElementById("agent3OverallScore");
-
-        els.agent3ClauseCount =
-            document.getElementById("agent3ClauseCount");
-
-        els.agent3Warnings =
-            document.getElementById("agent3Warnings");
-
-        els.agent3Analyses =
-            document.getElementById("agent3Analyses");
-
-        return;
-
-    }
-
-
-    const actions =
-        document.querySelector(".actions");
-
-
-    if (!actions) {
-
-        console.warn(
-            "[T&C] Could not create Agent 3 UI."
-        );
-
-        return;
-
-    }
-
-
-    const section =
-        document.createElement("section");
-
-
-    section.className =
-        "panel agent3-panel";
-
-
-    section.innerHTML = `
-
-        <div class="hero">
-
-            <div>
-
-                <span class="eyebrow">
-                    AGENT 3
-                </span>
-
-                <h2>
-                    Plain-Language Explanation
-                </h2>
-
-            </div>
-
-            <span
-                id="agent3Status"
-                class="status"
-            >
-                Waiting
-            </span>
-
-        </div>
-
-
-        <div class="risk-box">
-
-            <span>
-                AGENT 3 RISK
-            </span>
-
-            <strong id="agent3OverallRisk">
-                UNAVAILABLE
-            </strong>
-
-        </div>
-
-
-        <div class="meta">
-
-            Overall score:
-            <strong id="agent3OverallScore">
-                0/100
-            </strong>
-
-            &nbsp;·&nbsp;
-
-            Clauses analyzed:
-            <strong id="agent3ClauseCount">
-                0
-            </strong>
-
-        </div>
-
-
-        <h2>
-            Warnings
-        </h2>
-
-
-        <ul id="agent3Warnings">
-
-            <li>
-                Agent 3 will explain clauses after Agent 2 completes.
-            </li>
-
-        </ul>
-
-
-        <div class="section-head">
-
-            <h2>
-                Explanations
-            </h2>
-
-        </div>
-
-
-        <div id="agent3Analyses"></div>
-
-    `;
-
-
-    actions.parentNode.insertBefore(
-        section,
-        actions
-    );
-
-
-    els.agent3Status =
-        document.getElementById(
-            "agent3Status"
-        );
-
-    els.agent3OverallRisk =
-        document.getElementById(
-            "agent3OverallRisk"
-        );
-
-    els.agent3OverallScore =
-        document.getElementById(
-            "agent3OverallScore"
-        );
-
-    els.agent3ClauseCount =
-        document.getElementById(
-            "agent3ClauseCount"
-        );
-
-    els.agent3Warnings =
-        document.getElementById(
-            "agent3Warnings"
-        );
-
-    els.agent3Analyses =
-        document.getElementById(
-            "agent3Analyses"
-        );
-
-}
-
-/* ============================================================
- * FINAL COMPACT SUMMARY
- * ========================================================== */
-
-function ensureFinalSummaryUI() {
-
-    let summary =
-        document.getElementById("finalSummary");
-
-    if (summary) {
-        return summary;
-    }
-
-    const actions =
-        document.querySelector(".actions");
-
-    if (!actions) {
-        return null;
-    }
-
-    summary =
-        document.createElement("section");
-
-    summary.id =
-        "finalSummary";
-
-    summary.className =
-        "panel final-summary-panel";
-
-    summary.innerHTML = `
-
-        <div class="hero">
-
-            <div>
-
-                <span class="eyebrow">
-                    FINAL RESULT
-                </span>
-
-                <h2>
-                    Terms & Conditions Risk
-                </h2>
-
-            </div>
-
-        </div>
-
-        <div class="meta">
-            Policies scraped:
-            <strong id="finalPolicyCount">
-                0
-            </strong>
-        </div>
-
-        <div class="risk-box">
-
-            <span>
-                OVERALL RISK
-            </span>
-
-            <strong id="finalRiskLevel">
-                ANALYZING
-            </strong>
-
-        </div>
-
-        <div class="meta">
-            Overall score:
-            <strong id="finalRiskScore">
-                0/100
-            </strong>
-        </div>
-
-    `;
-
-    actions.parentNode.insertBefore(
-        summary,
-        actions
-    );
-
-    return summary;
-}
-
-
-/* ============================================================
- * HIDE INTERMEDIATE AGENT OUTPUT
- * ========================================================== */
-
-function hideIntermediateAgentOutput() {
-
-    const hide =
-        id => {
-
-            const element =
-                document.getElementById(id);
-
-            if (element) {
-                element.style.display =
-                    "none";
-            }
-
-        };
-
-    // Agent 1 intermediate output
-    hide("agent1Status");
-    hide("policies");
-
-    // Agent 2 intermediate output
-    hide("agent2Status");
-    hide("overallRisk");
-    hide("keyFindings");
-    hide("clauseCount");
-    hide("clauses");
-
-}
-
-/* ============================================================
- * PROFESSIONAL RISK VIEW
- * ========================================================== */
-
-(function injectProfessionalRiskStyles() {
-
-    if (
-        document.getElementById(
-            "professionalRiskStyles"
-        )
-    ) {
-        return;
-    }
-
-
-    const style =
-        document.createElement(
-            "style"
-        );
-
-
-    style.id =
-        "professionalRiskStyles";
-
-
-    style.textContent = `
-
-        #professionalRiskView {
-            display: block;
-            width: 100%;
-            box-sizing: border-box;
-            padding: 18px 14px 24px;
-            font-family: inherit;
-        }
-
-
-        .professional-page-header {
-            margin-bottom: 18px;
-        }
-
-
-        .professional-eyebrow {
-            display: block;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 1.4px;
-            opacity: 0.62;
-            margin-bottom: 5px;
-        }
-
-
-        .professional-page-header h2 {
-            margin: 0;
-            font-size: 22px;
-            line-height: 1.2;
-        }
-
-
-        .professional-page-header p {
-            margin: 7px 0 0;
-            font-size: 12px;
-            opacity: 0.62;
-        }
-
-
-        .professional-overall-card {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 18px;
-            border-radius: 14px;
-            border: 1px solid rgba(0,0,0,0.10);
-            background: #ffffff;
-            margin-bottom: 24px;
-            box-sizing: border-box;
-        }
-
-
-        .professional-overall-card > div:first-child {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-
-        .professional-overall-card > div:first-child span {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            opacity: 0.58;
-        }
-
-
-        .professional-overall-card > div:first-child strong {
-            font-size: 25px;
-            line-height: 1;
-        }
-
-
-        .professional-overall-score {
-            display: flex;
-            align-items: baseline;
-            gap: 2px;
-        }
-
-
-        .professional-overall-score strong {
-            font-size: 28px;
-        }
-
-
-        .professional-overall-score span {
-            font-size: 12px;
-            opacity: 0.55;
-        }
-
-
-        .professional-section-title {
-            font-size: 16px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-
-        .professional-risk-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-
-        .professional-risk-card {
-            background: #ffffff;
-            border: 1px solid rgba(0,0,0,0.10);
-            border-radius: 13px;
-            padding: 14px;
-            box-sizing: border-box;
-        }
-
-
-        .professional-risk-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-
-        .professional-risk-badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 8px;
-            border-radius: 999px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            background: #eef1f5;
-        }
-
-
-        .professional-risk-badge.low {
-            background: #eef5ef;
-        }
-
-
-        .professional-risk-badge.medium {
-            background: #f6f1e5;
-        }
-
-
-        .professional-risk-badge.high {
-            background: #f7eaea;
-        }
-
-
-        .professional-risk-badge.critical {
-            background: #f4e6e6;
-        }
-
-
-        .professional-risk-score {
-            font-size: 12px;
-            font-weight: 700;
-            opacity: 0.68;
-        }
-
-
-        .professional-risk-card h3 {
-            margin: 0 0 5px;
-            font-size: 16px;
-            line-height: 1.25;
-        }
-
-
-        .professional-risk-type {
-            font-size: 11px;
-            opacity: 0.65;
-            margin-bottom: 9px;
-        }
-
-
-        .professional-risk-type strong {
-            opacity: 1;
-        }
-
-
-        .professional-risk-summary {
-            margin: 0;
-            font-size: 13px;
-            line-height: 1.45;
-        }
-
-
-        .professional-risk-details {
-            margin-top: 11px;
-            border-top: 1px solid rgba(0,0,0,0.08);
-            padding-top: 9px;
-        }
-
-
-        .professional-risk-details summary {
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 700;
-            list-style-position: inside;
-        }
-
-
-        .professional-detail-block {
-            margin-top: 12px;
-        }
-
-
-        .professional-detail-block span {
-            display: block;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.8px;
-            opacity: 0.55;
-            margin-bottom: 4px;
-        }
-
-
-        .professional-detail-block p {
-            margin: 0;
-            font-size: 12px;
-            line-height: 1.5;
-        }
-
-
-        .professional-empty {
-            padding: 20px;
-            text-align: center;
-            opacity: 0.6;
-            font-size: 13px;
-        }
-
-    `;
-
-
-    document.head.appendChild(
-        style
-    );
-
-})();
-
-/* ============================================================
- * STATE
- * ========================================================== */
+// How long the extraction summary stays visible before transitioning
+// to the Agent 2 analyzing state.  Change this value to adjust the delay.
+const EXTRACTION_SUMMARY_DISPLAY_MS = 5000;
+
+// ============================================================
+// STATE
+// ============================================================
 
 let analysisRunning = false;
+let currentTabId    = null;
+let currentTabUrl   = "";
+let currentRunId    = null;
+let activeRisk      = "high";   // default selected tab
 
-let currentTabId = null;
+// Agent 3 clause data grouped by risk level (populated after analysis)
+let clausesByRisk = { high: [], medium: [], low: [] };
 
-let currentTabUrl = "";
+// ============================================================
+// DOM ELEMENTS
+// ============================================================
 
-let currentRunId = null;
+const states = {
+    idle:       document.getElementById("state-idle"),
+    extracting: document.getElementById("state-extracting"),
+    extracted:  document.getElementById("state-extracted"),
+    analyzing:  document.getElementById("state-analyzing"),
+    result:     document.getElementById("state-result"),
+    error:      document.getElementById("state-error"),
+};
 
+const btnAnalyze   = document.getElementById("btn-analyze");
+const btnReanalyze = document.getElementById("btn-reanalyze");
+const btnRetry     = document.getElementById("btn-retry");
 
-/* ============================================================
- * GET ACTIVE TAB
- * ========================================================== */
+// Extraction steps
+const stepScrape  = document.getElementById("step-scrape");
+const stepDetect  = document.getElementById("step-detect");
+const stepExtract = document.getElementById("step-extract");
 
-async function getTab() {
+// Extraction summary
+const docSummary = document.getElementById("doc-summary");
 
-    const tabs =
-        await chrome.tabs.query({
-            active: true,
-            currentWindow: true
-        });
+// Analysis steps
+const stepClauses = document.getElementById("step-clauses");
+const stepRisk    = document.getElementById("step-risk");
+const stepExplain = document.getElementById("step-explain");
 
+// Result elements
+const resultRiskLevel    = document.getElementById("result-risk-level");
+const resultRiskScore    = document.getElementById("result-risk-score");
+const countHigh          = document.getElementById("count-high");
+const countMedium        = document.getElementById("count-medium");
+const countLow           = document.getElementById("count-low");
+const tabHigh            = document.getElementById("tab-high");
+const tabMedium          = document.getElementById("tab-medium");
+const tabLow             = document.getElementById("tab-low");
+const tabCountHigh       = document.getElementById("tab-count-high");
+const tabCountMedium     = document.getElementById("tab-count-medium");
+const tabCountLow        = document.getElementById("tab-count-low");
+const clauseCategoryHeading = document.getElementById("clause-category-heading");
+const clausePanel        = document.getElementById("clause-panel");
+const resultDocContext   = document.getElementById("result-doc-context");
 
-    const tab = tabs[0];
+// Idle page info / error
+const idlePageInfo = document.getElementById("idle-page-info");
+const idleError    = document.getElementById("idle-error");
 
+// Error state
+const errorTitle = document.getElementById("error-title");
+const errorDesc  = document.getElementById("error-desc");
 
-    if (
-        !tab ||
-        typeof tab.id !== "number"
-    ) {
+// ============================================================
+// STATE MACHINE
+// ============================================================
 
-        throw new Error(
-            "No active webpage."
-        );
-
+function showState(name) {
+    for (const [key, el] of Object.entries(states)) {
+        if (el) el.hidden = (key !== name);
     }
-
-
-    if (
-        !tab.url ||
-        !/^https?:\/\//i.test(tab.url)
-    ) {
-
-        throw new Error(
-            "T&C Analyzer can only analyze HTTP/HTTPS webpages."
-        );
-
-    }
-
-
-    return tab;
-
 }
 
+// ============================================================
+// STEP HELPERS
+// ============================================================
 
-/* ============================================================
- * BROWSER DATA
- * ========================================================== */
+function setStep(el, status) {
+    // status: "pending" | "active" | "done"
+    if (!el) return;
+    el.className = `step step-${status}`;
+
+    const indicator = el.querySelector(".step-indicator");
+    if (!indicator) return;
+
+    // Clear previous text/content set by previous states
+    indicator.textContent = "";
+
+    if (status === "done") {
+        // The CSS ::after puts in the checkmark, but we need
+        // to ensure the class triggers it.
+        // No extra JS needed – handled by CSS.
+    }
+}
+
+// ============================================================
+// HTML ESCAPE
+// ============================================================
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+// ============================================================
+// DOCUMENT TYPE NORMALIZATION
+// ============================================================
+
+const DOC_TYPE_LABELS = {
+    terms:       "Terms & Conditions",
+    privacy:     "Privacy Policy",
+    cookies:     "Cookie Policy",
+    returns:     "Returns / Refunds",
+    refund:      "Returns / Refunds",
+    payments:    "Payments",
+    billing:     "Payments",
+    promotions:  "Promotions",
+    subscription:"Subscription",
+    legal:       "Legal / Other",
+    other:       "Other",
+};
+
+function normalizeDocType(raw) {
+    if (!raw) return "other";
+    const key = String(raw).toLowerCase().trim();
+    return DOC_TYPE_LABELS[key] || DOC_TYPE_LABELS["other"];
+}
+
+// Count policy documents by display type
+function countDocTypes(policies) {
+    const counts = {};
+    for (const policy of policies) {
+        const raw  = String(policy?.type || "other").toLowerCase();
+        const label = normalizeDocType(raw);
+        counts[label] = (counts[label] || 0) + 1;
+    }
+    return counts;
+}
+
+// ============================================================
+// RISK LEVEL NORMALIZATION
+// ============================================================
+
+function normalizeRiskLevel(raw) {
+    if (!raw) return "LOW";
+    const upper = String(raw).toUpperCase().trim();
+    if (upper === "CRITICAL") return "HIGH";
+    if (["HIGH", "MEDIUM", "LOW"].includes(upper)) return upper;
+    return "LOW";
+}
+
+// ============================================================
+// COUNT RISK LEVELS FROM ANALYSES
+// ============================================================
+
+function countRiskLevels(analyses) {
+    const counts = { high: 0, medium: 0, low: 0 };
+    for (const a of analyses) {
+        const level = normalizeRiskLevel(
+            a?.risk_level || a?.risk || ""
+        ).toLowerCase();
+        if (level in counts) counts[level]++;
+    }
+    return counts;
+}
+
+// ============================================================
+// GROUP CLAUSES BY RISK
+// ============================================================
+
+function groupByRisk(analyses) {
+    const groups = { high: [], medium: [], low: [] };
+    for (const a of analyses) {
+        const level = normalizeRiskLevel(
+            a?.risk_level || a?.risk || ""
+        ).toLowerCase();
+        if (level in groups) groups[level].push(a);
+    }
+    return groups;
+}
+
+// ============================================================
+// BACKEND HELPERS
+// ============================================================
+
+async function post(path, body) {
+    const response = await fetch(API + path, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(text || `HTTP ${response.status}`); }
+
+    if (!response.ok) {
+        throw new Error(data?.detail || data?.error || `HTTP ${response.status}`);
+    }
+    return data;
+}
+
+async function checkBackendHealth() {
+    try {
+        const res  = await fetch(API + "/health", { cache: "no-store" });
+        if (!res.ok) return false;
+        const data = await res.json();
+        return data?.status === "ok";
+    } catch {
+        return false;
+    }
+}
+
+// ============================================================
+// BROWSER DATA COLLECTION (collectPolicyData contract)
+// ============================================================
 
 async function browserData(tabId) {
-
-    if (
-        typeof tabId !== "number"
-    ) {
-
-        throw new Error(
-            "Invalid source tab."
-        );
-
+    if (typeof tabId !== "number") {
+        throw new Error("Invalid source tab.");
     }
 
+    return new Promise((resolve, reject) => {
+        let settled = false;
 
-    return new Promise(
-        (
-            resolve,
-            reject
-        ) => {
+        const done = (ok, val) => {
+            if (settled) return;
+            settled = true;
+            ok ? resolve(val) : reject(val);
+        };
 
-            let settled = false;
-
-
-            const finishError =
-                error => {
-
-                    if (settled) {
-                        return;
-                    }
-
-                    settled = true;
-
-                    reject(error);
-
-                };
-
-
-            const finishSuccess =
-                response => {
-
-                    if (settled) {
-                        return;
-                    }
-
-                    settled = true;
-
-                    resolve(response);
-
-                };
-
-
-            chrome.runtime.sendMessage(
-
-                {
-                    action:
-                        "collectPolicyData",
-
-                    tabId:
-                        tabId
-                },
-
-                response => {
-
-                    const runtimeError =
-                        chrome.runtime.lastError;
-
-
-                    if (
-                        runtimeError
-                    ) {
-
-                        finishError(
-                            new Error(
-                                runtimeError.message
-                            )
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        !response
-                    ) {
-
-                        finishError(
-                            new Error(
-                                "Browser collector returned no response."
-                            )
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        response.success === false
-                    ) {
-
-                        finishError(
-                            new Error(
-                                response.error ||
-                                "Browser collection failed."
-                            )
-                        );
-
-                        return;
-
-                    }
-
-
-                    finishSuccess(
-                        response
-                    );
-
+        chrome.runtime.sendMessage(
+            { action: "collectPolicyData", tabId },
+            response => {
+                const err = chrome.runtime.lastError;
+                if (err) {
+                    done(false, new Error(err.message));
+                    return;
                 }
-
-            );
-
-        }
-    );
-
-}
-
-
-/* ============================================================
- * BACKEND POST
- * ========================================================== */
-
-async function post(
-    path,
-    body
-) {
-
-    const response =
-        await fetch(
-            API + path,
-            {
-                method:
-                    "POST",
-
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-
-                body:
-                    JSON.stringify(body)
+                if (!response) {
+                    done(false, new Error("Browser collector returned no response."));
+                    return;
+                }
+                if (response.success === false) {
+                    done(false, new Error(response.error || "Browser collection failed."));
+                    return;
+                }
+                done(true, response);
             }
         );
-
-
-    const text =
-        await response.text();
-
-
-    let data;
-
-
-    try {
-
-        data =
-            JSON.parse(text);
-
-    } catch {
-
-        throw new Error(
-            text ||
-            `HTTP ${response.status}`
-        );
-
-    }
-
-
-    if (
-        !response.ok
-    ) {
-
-        throw new Error(
-            data.detail ||
-            data.error ||
-            `HTTP ${response.status}`
-        );
-
-    }
-
-
-    return data;
-
+    });
 }
 
+// ============================================================
+// ACTIVE TAB
+// ============================================================
 
-/* ============================================================
- * HEALTH CHECK
- * ========================================================== */
+async function getActiveTab() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab  = tabs[0];
 
-async function health() {
-
-    try {
-
-        const response =
-            await fetch(
-                API + "/health",
-                {
-                    cache:
-                        "no-store"
-                }
-            );
-
-
-        if (
-            !response.ok
-        ) {
-
-            throw new Error(
-                `HTTP ${response.status}`
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        if (
-            !data ||
-            data.status !== "ok"
-        ) {
-
-            throw new Error(
-                "Backend health check failed."
-            );
-
-        }
-
-
-        els.connectionStatus.textContent =
-            "Backend online";
-
-
-        return true;
-
-    } catch {
-
-        els.connectionStatus.textContent =
-            "Backend offline";
-
-
-        return false;
-
+    if (!tab || typeof tab.id !== "number") {
+        throw new Error("No active webpage.");
     }
-
-}
-
-
-/* ============================================================
- * RESET UI
- * ========================================================== */
-
-function resetUI() {
-
-    els.policies.innerHTML =
-        "";
-
-
-    els.clauses.innerHTML =
-        "";
-
-
-    els.keyFindings.innerHTML =
-        "<li>Agent 1 is collecting policy documents.</li>";
-
-
-    els.overallRisk.textContent =
-        "ANALYZING";
-
-
-    els.clauseCount.textContent =
-        "0";
-
-
-    els.agent1Status.textContent =
-        "Starting";
-
-
-    els.agent2Status.textContent =
-        "Waiting";
-
-
-    els.termsCount.textContent =
-        "0";
-
-    els.privacyCount.textContent =
-        "0";
-
-    els.cookiesCount.textContent =
-        "0";
-
-    els.legalCount.textContent =
-        "0";
-
-
-    els.policyCount.textContent =
-        "0 results";
-
-}
-
-
-/* ============================================================
- * BUTTON STATE
- * ========================================================== */
-
-function setRunningState(
-    running
-) {
-
-    analysisRunning =
-        running;
-
-
-    els.analyze.disabled =
-        running;
-
-
-    els.reanalyze.disabled =
-        running;
-
-
-    if (
-        running
-    ) {
-
-        els.analyze.textContent =
-            "Analyzing...";
-
-        els.reanalyze.textContent =
-            "Please wait...";
-
-    } else {
-
-        els.analyze.textContent =
-            "Run Analysis";
-
-        els.reanalyze.textContent =
-            "Run Again";
-
+    if (!tab.url || !/^https?:\/\//i.test(tab.url)) {
+        throw new Error("T&C Analyzer only works on HTTP/HTTPS pages.");
     }
-
+    return tab;
 }
 
+// ============================================================
+// RENDER: EXTRACTION SUMMARY (State EXTRACTED)
+// ============================================================
 
-/* ============================================================
- * RENDER AGENT 1
- * ========================================================== */
+function renderExtractionSummary(policies) {
+    const safe = Array.isArray(policies) ? policies : [];
+    const counts = countDocTypes(safe);
+    const total  = safe.length;
 
-function renderPolicies(
-    policies
-) {
+    if (!docSummary) return;
 
-    const safePolicies =
-        Array.isArray(policies)
-            ? policies
-            : [];
-
-
-    els.policyCount.textContent =
-        `${safePolicies.length} result${
-            safePolicies.length === 1
-                ? ""
-                : "s"
-        }`;
-
-
-    const counts = {
-
-        terms:
-            0,
-
-        privacy:
-            0,
-
-        cookies:
-            0,
-
-        legal:
-            0
-
-    };
-
-    // Map policy types not shown in their own counter to "legal".
-    // background.js classifyPolicyUrl() can also produce:
-    // "returns", "payments", "promotions" — all displayed under Legal.
-    const TYPE_DISPLAY_MAP = {
-        returns:    "legal",
-        payments:   "legal",
-        promotions: "legal",
-    };
-
-
-    els.policies.innerHTML =
-        "";
-
-
-    for (
-        const policy of safePolicies
-    ) {
-
-        const type =
-            String(
-                policy?.type ||
-                "legal"
-            )
-                .toLowerCase();
-
-        // Resolve display category: "returns"/"payments"/"promotions"
-        // are shown under the "legal" counter.
-        const displayType =
-            TYPE_DISPLAY_MAP[type] ||
-            type;
-
-        if (
-            counts[displayType] !== undefined
-        ) {
-
-            counts[displayType]++;
-
-        }
-
-
-        const card =
-            document.createElement(
-                "article"
-            );
-
-
-        card.className =
-            "card";
-
-
-        const title =
-
-            type === "privacy"
-                ? "Privacy Policy"
-
-            : type === "terms"
-                ? "Terms & Conditions"
-
-            : type === "cookies"
-                ? "Cookie Policy"
-
-            : "Legal / Other Policy";
-
-
-        const content =
-            String(
-                policy?.content ||
-                policy?.text ||
-                ""
-            );
-
-
-        card.innerHTML = `
-
-            <div class="card-title">
-                ${escapeHtml(title)}
+    if (total === 0) {
+        docSummary.innerHTML = `
+            <div class="doc-summary-row">
+                <span class="doc-summary-type">No policy documents found</span>
             </div>
-
-            <div class="meta">
-                ${content.length.toLocaleString()}
-                characters extracted
-            </div>
-
-            <div class="url">
-                ${escapeHtml(
-                    policy?.url ||
-                    ""
-                )}
-            </div>
-
-            <div class="preview">
-                ${escapeHtml(
-                    content.slice(
-                        0,
-                        1200
-                    )
-                )}
-            </div>
-
-            <div class="source">
-                Source:
-                ${escapeHtml(
-                    policy?.source ||
-                    "browser"
-                )}
-            </div>
-
         `;
-
-
-        els.policies.appendChild(
-            card
-        );
-
+        return;
     }
 
+    const rows = Object.entries(counts)
+        .filter(([, n]) => n > 0)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([label, n]) => `
+            <div class="doc-summary-row">
+                <span class="doc-summary-type">${escapeHtml(label)}</span>
+                <span class="doc-summary-count">${escapeHtml(n)}</span>
+            </div>
+        `)
+        .join("");
 
-    els.termsCount.textContent =
-        counts.terms;
+    const totalLabel = total === 1 ? "1 document extracted" : `${total} documents extracted`;
 
-
-    els.privacyCount.textContent =
-        counts.privacy;
-
-
-    els.cookiesCount.textContent =
-        counts.cookies;
-
-
-    els.legalCount.textContent =
-        counts.legal;
-
-
-    return safePolicies;
-
+    docSummary.innerHTML = `
+        ${rows}
+        <div class="doc-summary-total">${escapeHtml(totalLabel)}</div>
+    `;
 }
 
+// ============================================================
+// RENDER: OVERALL RISK CARD
+// ============================================================
 
-/* ============================================================
- * RENDER AGENT 2
- * ========================================================== */
+function renderRiskCard(overallRisk, overallScore) {
+    if (!resultRiskLevel || !resultRiskScore) return;
 
-function renderAgent2(
-    result
-) {
+    const level = normalizeRiskLevel(overallRisk);
 
-    const clauses =
-        Array.isArray(
-            result?.clauses
-        )
-            ? result.clauses
-            : [];
+    resultRiskLevel.textContent = level;
+    resultRiskLevel.setAttribute("data-level", level);
 
+    const score = Number.isFinite(Number(overallScore))
+        ? Math.max(0, Math.min(100, Math.round(Number(overallScore))))
+        : 0;
+    resultRiskScore.textContent = String(score);
+}
 
-    const summary =
-        result?.summary ||
-        {};
+// ============================================================
+// RENDER: CLAUSE COUNTS & TAB COUNTS
+// ============================================================
 
+function renderClauseCounts(counts) {
+    if (countHigh)    countHigh.textContent   = String(counts.high);
+    if (countMedium)  countMedium.textContent = String(counts.medium);
+    if (countLow)     countLow.textContent    = String(counts.low);
+    if (tabCountHigh)   tabCountHigh.textContent   = String(counts.high);
+    if (tabCountMedium) tabCountMedium.textContent = String(counts.medium);
+    if (tabCountLow)    tabCountLow.textContent    = String(counts.low);
+}
 
-    const overallRisk =
-        result?.overall_risk ||
-        summary.overall_risk ||
-        "UNAVAILABLE";
+// ============================================================
+// RENDER: RISK TABS (active state)
+// ============================================================
 
+function renderRiskTabs(selectedRisk) {
+    const tabs = { high: tabHigh, medium: tabMedium, low: tabLow };
 
-    els.agent2Status.textContent =
-        result?.status ||
-        "Complete";
+    for (const [level, el] of Object.entries(tabs)) {
+        if (!el) continue;
+        const isActive = level === selectedRisk;
+        el.classList.toggle("risk-tab-active", isActive);
+        el.setAttribute("aria-selected", isActive ? "true" : "false");
+    }
+}
 
+// ============================================================
+// RENDER: CATEGORY HEADING
+// ============================================================
 
-    els.overallRisk.textContent =
-        overallRisk;
+function renderCategoryHeading(risk, count) {
+    if (!clauseCategoryHeading) return;
+    const label = risk.toUpperCase();
+    const noun  = count === 1 ? "clause" : "clauses";
+    clauseCategoryHeading.innerHTML = `
+        <span class="cat-label cat-label-${escapeHtml(risk)}">${escapeHtml(label)} RISK</span>
+        <span class="cat-count">${escapeHtml(count)} ${escapeHtml(noun)}</span>
+    `;
+}
 
+// ============================================================
+// CLAUSE DISPLAY TITLE
+// ============================================================
 
-    els.clauseCount.textContent =
-        String(
-            clauses.length
-        );
+// Maps Agent 2 / Agent 3 machine-readable category values to
+// short human-readable labels shown on clause card headers.
+// Covers the full Agent 2 category vocabulary (schemas.py /
+// ClauseCategory enum in agent3/models.py).
+const CATEGORY_LABELS = {
+    // Agent 2 primary categories
+    subscription:          "Subscription",
+    auto_renewal:          "Automatic Renewal",
+    cancellation:          "Cancellation",
+    payments:              "Payments",
+    payment:               "Payments",
+    privacy:               "Privacy",
+    data_collection:       "Data Collection",
+    data_sharing:          "Data Sharing",
+    refund:                "Refund",
+    intellectual_property: "Intellectual Property",
+    license:               "License",
+    liability:             "Liability",
+    limitation_of_liability: "Limitation of Liability",
+    indemnification:       "Indemnification",
+    arbitration:           "Arbitration",
+    termination:           "Termination",
+    tracking:              "Tracking",
+    security:              "Security",
+    prohibited_use:        "Prohibited Use",
+    // Agent 3 additional categories
+    data_privacy:          "Data Privacy",
+    data_retention:        "Data Retention",
+    user_content:          "User Content",
+    governing_law:         "Governing Law",
+    account_termination:   "Account Termination",
+    cookies:               "Cookies",
+    third_party:           "Third-Party Services",
+    third_party_services:  "Third-Party Services",
+    marketing:             "Marketing",
+    age_requirement:       "Age Requirement",
+    other:                 "General Terms",
+};
 
+// Keyword patterns used as a last-resort text fallback.
+// Each entry: [regex, display label].
+// Tested against the first ~300 chars of the clause's source text.
+const TEXT_KEYWORD_PATTERNS = [
+    [/auto\w*\s+renew|renew\w*\s+auto/i,         "Automatic Renewal"],
+    [/arbitrat/i,                                  "Arbitration"],
+    [/class\s+action/i,                            "Class Action Waiver"],
+    [/limitation\s+of\s+liabilit/i,               "Limitation of Liability"],
+    [/indemnif/i,                                  "Indemnification"],
+    [/intellectual\s+propert|copyright|trademark/i,"Intellectual Property"],
+    [/data\s+shar|share.*personal|personal.*shar/i,"Data Sharing"],
+    [/data\s+collect|collect.*personal|personal.*collect/i, "Data Collection"],
+    [/data\s+retent|retain.*data|data.*retain/i,   "Data Retention"],
+    [/governing\s+law|jurisdiction|applicable\s+law/i, "Governing Law"],
+    [/terminat/i,                                  "Termination"],
+    [/cancell/i,                                   "Cancellation"],
+    [/refund/i,                                    "Refund"],
+    [/subscript/i,                                 "Subscription"],
+    [/payment|billing|charge/i,                    "Payments"],
+    [/track|cookie|beacon/i,                       "Tracking"],
+    [/third.party|third\s+part/i,                  "Third-Party Services"],
+    [/privacy\s+polic|personal\s+info/i,           "Privacy"],
+    [/prohibit|restrict|not\s+allow/i,             "Prohibited Use"],
+    [/security|protect.*account|account.*protect/i,"Security"],
+    [/user\s+content|your\s+content|submit.*content/i, "User Content"],
+    [/licen[sc]e/i,                                "License"],
+    [/liabilit/i,                                  "Liability"],
+    [/market|promotional\s+email|opt.out/i,        "Marketing"],
+    [/cookie/i,                                    "Cookies"],
+    [/age\s+require|must\s+be\s+\d+|under\s+\d+/i,"Age Requirement"],
+];
 
-    const findings =
-        Array.isArray(
-            summary.key_findings
-        )
-            ? summary.key_findings
+/**
+ * Derive a short human-readable display title for a clause card.
+ *
+ * Priority:
+ *   1. Explicit title field (if it looks meaningful — not a generic fallback)
+ *   2. Category mapped via CATEGORY_LABELS
+ *   3. Text keyword matched against clause content
+ *   4. Neutral fallback "Clause"
+ *
+ * @param {object} analysis  – one element from Agent 3 analyses[]
+ * @returns {string}
+ */
+function getClauseDisplayTitle(analysis) {
+    // --- 1. Explicit title ---
+    const rawTitle = String(
+        analysis?.title || analysis?.clause_title || ""
+    ).trim();
 
-        : Array.isArray(
-            result?.key_findings
-        )
-            ? result.key_findings
+    // Accept the title only if it isn't one of the known generic placeholders
+    // that we're trying to replace.
+    const GENERIC_TITLES = new Set([
+        "", "policy", "policy clause", "clause",
+        "policy 1", "policy 2", "policy 3", "policy 4", "policy 5",
+        "clause 1", "clause 2", "clause 3", "clause 4", "clause 5",
+        "untitled clause", "untitled",
+    ]);
 
+    if (rawTitle && !GENERIC_TITLES.has(rawTitle.toLowerCase())) {
+        // Truncate very long titles to keep cards scannable
+        return rawTitle.length > 60 ? rawTitle.slice(0, 57).trimEnd() + "…" : rawTitle;
+    }
+
+    // --- 2. Category mapping ---
+    const rawCategory = String(
+        analysis?.category || analysis?.clause_category || ""
+    ).trim().toLowerCase();
+
+    if (rawCategory && CATEGORY_LABELS[rawCategory]) {
+        return CATEGORY_LABELS[rawCategory];
+    }
+
+    // Also try partial key matching for compound categories
+    // (e.g. "auto_renewal_policy" should still map to "Automatic Renewal")
+    for (const [key, label] of Object.entries(CATEGORY_LABELS)) {
+        if (key !== "other" && rawCategory.includes(key)) {
+            return label;
+        }
+    }
+
+    // --- 3. Text keyword fallback ---
+    const searchText = String(
+        analysis?.summary     ||
+        analysis?.explanation ||
+        analysis?.evidence    ||
+        analysis?.text        ||
+        ""
+    ).slice(0, 300);
+
+    if (searchText) {
+        for (const [pattern, label] of TEXT_KEYWORD_PATTERNS) {
+            if (pattern.test(searchText)) {
+                return label;
+            }
+        }
+    }
+
+    // --- 4. Neutral fallback ---
+    return "Clause";
+}
+
+// ============================================================
+// RENDER: SINGLE CLAUSE CARD
+// ============================================================
+
+function renderClauseCard(analysis, index, expandFirst) {
+    const isExpanded = expandFirst && index === 0;
+
+    const riskLevel = normalizeRiskLevel(
+        analysis?.risk_level || analysis?.risk || ""
+    ).toLowerCase();
+
+    // Derive a meaningful display title using the priority helper.
+    const title = getClauseDisplayTitle(analysis);
+    const summary     = String(analysis?.summary     || analysis?.explanation  || "").trim();
+    const explanation = String(analysis?.explanation || analysis?.summary      || "").trim();
+    const userImpact  = String(analysis?.user_impact || analysis?.impact       || "").trim();
+    const whyMatters  = String(analysis?.why_it_matters || "").trim();
+    const recommendation = String(analysis?.recommendation || "").trim();
+    const evidence    = String(analysis?.evidence || analysis?.risk_reason || "").trim();
+
+    // Build body fields — only include non-empty ones
+    const fields = [];
+
+    if (summary) {
+        fields.push({ label: "Summary", text: summary });
+    }
+
+    if (explanation && explanation !== summary) {
+        fields.push({ label: "Explanation", text: explanation });
+    }
+
+    if (whyMatters) {
+        fields.push({ label: "Why it matters", text: whyMatters });
+    }
+
+    if (userImpact) {
+        fields.push({ label: "User impact", text: userImpact });
+    }
+
+    if (recommendation) {
+        fields.push({ label: "What to consider", text: recommendation });
+    }
+
+    const bodyFieldsHtml = fields
+        .map(f => `
+            <div class="clause-field">
+                <div class="clause-field-label">${escapeHtml(f.label)}</div>
+                <div class="clause-field-text">${escapeHtml(f.text)}</div>
+            </div>
+        `)
+        .join("");
+
+    // Source shown last, in a visually secondary block
+    const sourceHtml = evidence ? `
+        <div class="clause-source-block">
+            <div class="clause-field-label">Risk reason</div>
+            <div class="clause-field-text">${escapeHtml(evidence)}</div>
+        </div>
+    ` : "";
+
+    const cardId = `clause-card-${index}`;
+    const bodyId = `clause-body-${index}`;
+
+    const chevron = `<svg class="clause-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none" aria-hidden="true">
+        <path d="M1.5 1.5l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+
+    return `
+        <article
+            class="clause-card"
+            id="${escapeHtml(cardId)}"
+            aria-expanded="${isExpanded ? "true" : "false"}"
+        >
+            <button
+                class="clause-card-header"
+                type="button"
+                aria-expanded="${isExpanded ? "true" : "false"}"
+                aria-controls="${escapeHtml(bodyId)}"
+                data-card="${escapeHtml(cardId)}"
+            >
+                <span class="clause-header-left">
+                    <span class="clause-risk-pip clause-risk-pip-${escapeHtml(riskLevel)}" aria-hidden="true"></span>
+                    <span class="clause-title-text">${escapeHtml(title)}</span>
+                </span>
+                ${chevron}
+            </button>
+            <div
+                class="clause-body"
+                id="${escapeHtml(bodyId)}"
+                role="region"
+                aria-label="${escapeHtml(title)}"
+            >
+                ${bodyFieldsHtml}
+                ${sourceHtml}
+            </div>
+        </article>
+    `;
+}
+
+// ============================================================
+// RENDER: CLAUSE LIST FOR ACTIVE RISK LEVEL
+// ============================================================
+
+function renderRiskClauses(risk) {
+    if (!clausePanel) return;
+
+    const clauses = clausesByRisk[risk] || [];
+
+    if (clauses.length === 0) {
+        const label = risk.toUpperCase();
+        clausePanel.innerHTML = `
+            <div class="clause-empty">
+                No ${escapeHtml(label)} risk clauses found.
+            </div>
+        `;
+        return;
+    }
+
+    clausePanel.innerHTML = clauses
+        .map((a, i) => renderClauseCard(a, i, true))
+        .join("");
+}
+
+// ============================================================
+// TOGGLE CLAUSE CARD
+// ============================================================
+
+function toggleClause(cardId) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+
+    const isExpanded = card.getAttribute("aria-expanded") === "true";
+    const next = !isExpanded;
+
+    card.setAttribute("aria-expanded", next ? "true" : "false");
+
+    const btn = card.querySelector(".clause-card-header");
+    if (btn) btn.setAttribute("aria-expanded", next ? "true" : "false");
+}
+
+// ============================================================
+// SWITCH RISK TAB
+// ============================================================
+
+function switchRiskTab(risk) {
+    if (!["high", "medium", "low"].includes(risk)) return;
+    activeRisk = risk;
+    renderRiskTabs(risk);
+    renderCategoryHeading(risk, (clausesByRisk[risk] || []).length);
+    renderRiskClauses(risk);
+}
+
+// ============================================================
+// DOCUMENT CONTEXT FOOTER
+// ============================================================
+
+function renderDocContext(policies) {
+    if (!resultDocContext) return;
+    const safe  = Array.isArray(policies) ? policies : [];
+    const total = safe.length;
+    if (total === 0) {
+        resultDocContext.textContent = "";
+        return;
+    }
+    const counts  = countDocTypes(safe);
+    const entries = Object.entries(counts)
+        .filter(([, n]) => n > 0)
+        .map(([label, n]) => `${label}: ${n}`)
+        .join(" · ");
+    const noun = total === 1 ? "document" : "documents";
+    resultDocContext.textContent = `${total} policy ${noun} analyzed · ${entries}`;
+}
+
+// ============================================================
+// RENDER: FINAL ANALYSIS (Agent 3 result)
+// ============================================================
+
+function renderFinalAnalysis(agent3Result, policies) {
+    const analyses = Array.isArray(agent3Result?.analyses)
+        ? agent3Result.analyses
         : [];
 
+    const overallRisk  = agent3Result?.overall_risk_level
+        || agent3Result?.overall_risk
+        || "LOW";
 
-    els.keyFindings.innerHTML =
-        findings.length
+    const overallScore = agent3Result?.overall_risk_score
+        ?? agent3Result?.risk_score
+        ?? 0;
 
-            ? findings
-                .map(
-                    item =>
-                        `<li>${
-                            escapeHtml(
-                                item
-                            )
-                        }</li>`
-                )
-                .join("")
+    // Group clauses
+    clausesByRisk = groupByRisk(analyses);
+    const counts  = countRiskLevels(analyses);
 
-            : "<li>No high-priority findings were returned.</li>";
+    // Render risk card
+    renderRiskCard(overallRisk, overallScore);
 
+    // Render summary counts
+    renderClauseCounts(counts);
 
-    els.clauses.innerHTML =
-        "";
+    // Render doc context footer
+    renderDocContext(policies);
 
+    // Determine default active tab:
+    // Prefer HIGH if it has clauses, then MEDIUM, then LOW
+    let defaultTab = "high";
+    if (counts.high > 0)        defaultTab = "high";
+    else if (counts.medium > 0) defaultTab = "medium";
+    else                        defaultTab = "low";
 
-    for (
-        const clause of clauses
-    ) {
+    activeRisk = defaultTab;
+    renderRiskTabs(defaultTab);
+    renderCategoryHeading(defaultTab, counts[defaultTab]);
+    renderRiskClauses(defaultTab);
 
-        const card =
-            document.createElement(
-                "article"
-            );
-
-
-        card.className =
-            "card";
-
-
-        const riskLevel =
-            clause?.risk_level ||
-            "LOW";
-
-
-        const riskScore =
-            Number(
-                clause?.risk_score ||
-                0
-            );
-
-
-        card.innerHTML = `
-
-            <div class="clause-title">
-                ${escapeHtml(
-                    clause?.title ||
-                    "Clause"
-                )}
-            </div>
-
-            <div class="meta">
-                ${escapeHtml(
-                    riskLevel
-                )}
-                &middot; score
-                ${riskScore}/100
-                &middot;
-                ${escapeHtml(
-                    clause?.document_type ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                SUMMARY
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.summary ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                WHY IT MATTERS
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.explanation ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                OBLIGATIONS
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.obligations ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                PERMISSIONS
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.permissions ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                RESTRICTIONS
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.restrictions ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                CONSEQUENCES
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.consequences ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                RISK REASON
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.risk_reason ||
-                    ""
-                )}
-            </div>
-
-            <div class="clause-label">
-                SOURCE
-            </div>
-
-            <div class="clause-text">
-                ${escapeHtml(
-                    clause?.source_text ||
-                    ""
-                )}
-            </div>
-
-        `;
-
-
-        els.clauses.appendChild(
-            card
-        );
-
-    }
-
-
-    if (
-        !clauses.length
-    ) {
-
-        els.clauses.innerHTML =
-            '<div class="card">No clauses were returned.</div>';
-
-    }
-
+    showState("result");
 }
 
+// ============================================================
+// RENDER: IDLE
+// ============================================================
 
-
-/* ============================================================
- * RENDER AGENT 3
- * ========================================================== */
-
-function renderAgent3(result) {
-
-    ensureAgent3UI();
-
-    if (!els.agent3Status) {
-        return;
+function renderIdleState(tab) {
+    if (idlePageInfo && tab) {
+        const display = tab.title || tab.url || "";
+        idlePageInfo.textContent = display;
     }
+    if (idleError) {
+        idleError.textContent = "";
+        idleError.hidden = true;
+    }
+    showState("idle");
+}
 
+// ============================================================
+// RENDER: EXTRACTION PROGRESS
+// ============================================================
 
-    const analyses =
-        Array.isArray(result?.analyses)
-            ? result.analyses
+function renderExtractionProgress() {
+    setStep(stepScrape,  "active");
+    setStep(stepDetect,  "pending");
+    setStep(stepExtract, "pending");
+    showState("extracting");
+}
+
+// ============================================================
+// RENDER: ANALYSIS PROGRESS
+// ============================================================
+
+function renderAnalysisProgress() {
+    setStep(stepClauses, "active");
+    setStep(stepRisk,    "pending");
+    setStep(stepExplain, "pending");
+    showState("analyzing");
+}
+
+// ============================================================
+// SHOW ERROR
+// ============================================================
+
+function showErrorState(title, desc) {
+    if (errorTitle) errorTitle.textContent = title || "Something went wrong";
+    if (errorDesc)  errorDesc.textContent  = desc  || "An unexpected error occurred.";
+    showState("error");
+}
+
+// ============================================================
+// MAIN ANALYSIS PIPELINE
+// ============================================================
+
+async function runAnalysis() {
+    if (analysisRunning) return;
+    analysisRunning = true;
+
+    // Disable buttons
+    if (btnAnalyze)   btnAnalyze.disabled   = true;
+    if (btnReanalyze) btnReanalyze.disabled = true;
+
+    let collectedPolicies = [];
+
+    try {
+        // --------------------------------------------------
+        // STEP 1: Get active tab
+        // --------------------------------------------------
+        let tab;
+        try {
+            tab = await getActiveTab();
+        } catch (err) {
+            showErrorState(
+                "Unable to analyze this page",
+                err?.message || "Could not access the current page."
+            );
+            return;
+        }
+
+        currentTabId  = tab.id;
+        currentTabUrl = tab.url;
+
+        // --------------------------------------------------
+        // STEP 2: Backend health
+        // --------------------------------------------------
+        const healthy = await checkBackendHealth();
+        if (!healthy) {
+            showErrorState(
+                "Backend is not running",
+                "Please start the FastAPI backend on port 8001 and try again."
+            );
+            return;
+        }
+
+        // --------------------------------------------------
+        // STEP 3: Extracting UI + browser collection
+        // --------------------------------------------------
+        renderExtractionProgress();
+        setStep(stepScrape, "active");
+
+        let browser;
+        try {
+            browser = await browserData(currentTabId);
+        } catch (err) {
+            // Non-fatal — proceed with empty browser data
+            browser = {
+                browser_links:     [],
+                browser_documents: [],
+                browser_all_links: [],
+                browser_page_text: "",
+            };
+        }
+
+        setStep(stepScrape,  "done");
+        setStep(stepDetect,  "active");
+
+        // --------------------------------------------------
+        // STEP 4: Agent 1
+        // --------------------------------------------------
+        setStep(stepDetect,  "done");
+        setStep(stepExtract, "active");
+
+        let a1;
+        try {
+            a1 = await post("/api/agent1/analyze", {
+                url:               currentTabUrl,
+                browser_links:     browser?.browser_links     || [],
+                browser_documents: browser?.browser_documents || [],
+                browser_all_links: browser?.browser_all_links || [],
+                browser_page_text: browser?.browser_page_text || "",
+                browser_title:     browser?.title || tab.title || "",
+            });
+        } catch (err) {
+            showErrorState(
+                "Unable to analyze this page",
+                "We couldn't extract usable policy information from this page."
+            );
+            return;
+        }
+
+        currentRunId = a1?.run_id || null;
+
+        const agent1Result = a1?.agent1 || a1 || {};
+        collectedPolicies  = Array.isArray(agent1Result?.policy_pages)
+            ? agent1Result.policy_pages
+            : (Array.isArray(agent1Result?.documents)
+                ? agent1Result.documents
+                : []);
+
+        setStep(stepExtract, "done");
+
+        // --------------------------------------------------
+        // STEP 5: Show extraction summary briefly
+        // --------------------------------------------------
+        renderExtractionSummary(collectedPolicies);
+        showState("extracted");
+
+        if (collectedPolicies.length === 0) {
+            showErrorState(
+                "No policy documents found",
+                "This page does not appear to contain usable Terms, Privacy, Cookie, or related policy information."
+            );
+            return;
+        }
+
+        if (!currentRunId) {
+            showErrorState(
+                "Unable to analyze this page",
+                "Policy extraction did not return a valid session. Please try again."
+            );
+            return;
+        }
+
+        // Keep extraction summary visible long enough for the user to read it.
+        // Duration is controlled by EXTRACTION_SUMMARY_DISPLAY_MS (top of file).
+        await new Promise(r => setTimeout(r, EXTRACTION_SUMMARY_DISPLAY_MS));
+
+        // --------------------------------------------------
+        // STEP 6: Analyzing UI
+        // --------------------------------------------------
+        renderAnalysisProgress();
+        setStep(stepClauses, "active");
+
+        // --------------------------------------------------
+        // STEP 7: Agent 2
+        // --------------------------------------------------
+        let a2;
+        try {
+            a2 = await post("/api/agent2/analyze", { run_id: currentRunId });
+        } catch (err) {
+            showErrorState(
+                "Analysis couldn't be completed",
+                "The page was extracted, but the risk analysis could not be completed."
+            );
+            return;
+        }
+
+        setStep(stepClauses, "done");
+        setStep(stepRisk,    "done");
+        setStep(stepExplain, "active");
+
+        // --------------------------------------------------
+        // STEP 8: Agent 3
+        // --------------------------------------------------
+        let a3;
+        try {
+            a3 = await post("/api/agent3/analyze", { run_id: currentRunId });
+        } catch (err) {
+            showErrorState(
+                "Analysis couldn't be completed",
+                "The page was extracted, but the plain-language explanation could not be completed."
+            );
+            return;
+        }
+
+        setStep(stepExplain, "done");
+
+        const agent3Result = a3?.agent3 || a3 || {};
+
+        // --------------------------------------------------
+        // STEP 9: Render final result
+        // --------------------------------------------------
+        const analyses = Array.isArray(agent3Result?.analyses)
+            ? agent3Result.analyses
             : [];
 
-
-    const overallRisk =
-        String(
-            result?.overall_risk_level ||
-            result?.overall_risk ||
-            "UNAVAILABLE"
-        ).toUpperCase();
-
-
-    const overallScore =
-        Number(
-            result?.overall_risk_score ??
-            result?.risk_score ??
-            0
-        );
-
-
-    const analyzedClauses =
-        Number(
-            result?.analyzed_clauses ??
-            analyses.length
-        );
-
-
-    /*
-     * --------------------------------------------------------
-     * CREATE CLEAN USER-FACING RESULT VIEW
-     * --------------------------------------------------------
-     */
-
-    let resultView =
-        document.getElementById(
-            "professionalRiskView"
-        );
-
-
-    if (!resultView) {
-
-        resultView =
-            document.createElement(
-                "section"
+        if (analyses.length === 0) {
+            showErrorState(
+                "No analyzable clauses found",
+                "The available policy content could not be broken into analyzable clauses."
             );
-
-        resultView.id =
-            "professionalRiskView";
-
-        resultView.className =
-            "professional-risk-view";
-
-
-        /*
-         * Insert before the action buttons.
-         */
-
-        const actions =
-            document.querySelector(
-                ".actions"
-            );
-
-
-        if (actions) {
-
-            actions.parentNode.insertBefore(
-                resultView,
-                actions
-            );
-
-        } else {
-
-            document.body.prepend(
-                resultView
-            );
-
-        }
-
-    }
-
-
-    /*
-     * --------------------------------------------------------
-     * RISK LEVEL CLASS
-     * --------------------------------------------------------
-     */
-
-    const riskClass =
-        overallRisk
-            .toLowerCase()
-            .replace(
-                /[^a-z]/g,
-                ""
-            );
-
-
-    /*
-     * --------------------------------------------------------
-     * FINDINGS
-     * --------------------------------------------------------
-     */
-
-    const findingsHtml =
-        analyses.map(
-            (analysis, index) => {
-
-                const riskLevel =
-                    String(
-                        analysis?.risk_level ||
-                        analysis?.risk ||
-                        "LOW"
-                    ).toUpperCase();
-
-
-                const riskScore =
-                    Number(
-                        analysis?.risk_score ??
-                        analysis?.score ??
-                        0
-                    );
-
-
-                const riskType =
-                    analysis?.category ||
-                    analysis?.clause_category ||
-                    analysis?.type ||
-                    "General";
-
-
-                const title =
-                    analysis?.title ||
-                    analysis?.clause_title ||
-                    analysis?.name ||
-                    "Policy clause";
-
-
-                const summary =
-                    analysis?.summary ||
-                    analysis?.plain_language ||
-                    analysis?.what_it_means ||
-                    analysis?.explanation ||
-                    "No summary available.";
-
-
-                const explanation =
-                    analysis?.explanation ||
-                    analysis?.plain_language ||
-                    analysis?.what_it_means ||
-                    "";
-
-
-                const whyItMatters =
-                    analysis?.why_it_matters ||
-                    analysis?.reason ||
-                    "";
-
-
-                const userImpact =
-                    analysis?.user_impact ||
-                    analysis?.impact ||
-                    "";
-
-
-                const recommendation =
-                    analysis?.recommendation ||
-                    "";
-
-
-                const evidence =
-                    analysis?.evidence ||
-                    analysis?.risk_reason ||
-                    "";
-
-
-                const safeId =
-                    `risk-detail-${index}`;
-
-
-                return `
-
-                    <article
-                        class="professional-risk-card"
-                    >
-
-                        <div
-                            class="professional-risk-header"
-                        >
-
-                            <span
-                                class="professional-risk-badge ${escapeHtml(riskLevel.toLowerCase())}"
-                            >
-                                ${escapeHtml(riskLevel)} RISK
-                            </span>
-
-                            <span
-                                class="professional-risk-score"
-                            >
-                                ${escapeHtml(riskScore)}/100
-                            </span>
-
-                        </div>
-
-
-                        <h3>
-                            ${escapeHtml(title)}
-                        </h3>
-
-
-                        <div
-                            class="professional-risk-type"
-                        >
-                            Risk type:
-                            <strong>
-                                ${escapeHtml(riskType)}
-                            </strong>
-                        </div>
-
-
-                        <p
-                            class="professional-risk-summary"
-                        >
-                            ${escapeHtml(summary)}
-                        </p>
-
-
-                        <details
-                            class="professional-risk-details"
-                            id="${safeId}"
-                        >
-
-                            <summary>
-                                View explanation
-                            </summary>
-
-
-                            ${
-                                explanation
-                                    ? `
-                                        <div class="professional-detail-block">
-
-                                            <span>
-                                                EXPLANATION
-                                            </span>
-
-                                            <p>
-                                                ${escapeHtml(
-                                                    explanation
-                                                )}
-                                            </p>
-
-                                        </div>
-                                    `
-                                    : ""
-                            }
-
-
-                            ${
-                                whyItMatters
-                                    ? `
-                                        <div class="professional-detail-block">
-
-                                            <span>
-                                                WHY IT MATTERS
-                                            </span>
-
-                                            <p>
-                                                ${escapeHtml(
-                                                    whyItMatters
-                                                )}
-                                            </p>
-
-                                        </div>
-                                    `
-                                    : ""
-                            }
-
-
-                            ${
-                                userImpact
-                                    ? `
-                                        <div class="professional-detail-block">
-
-                                            <span>
-                                                USER IMPACT
-                                            </span>
-
-                                            <p>
-                                                ${escapeHtml(
-                                                    userImpact
-                                                )}
-                                            </p>
-
-                                        </div>
-                                    `
-                                    : ""
-                            }
-
-
-                            ${
-                                recommendation
-                                    ? `
-                                        <div class="professional-detail-block">
-
-                                            <span>
-                                                WHAT TO CONSIDER
-                                            </span>
-
-                                            <p>
-                                                ${escapeHtml(
-                                                    recommendation
-                                                )}
-                                            </p>
-
-                                        </div>
-                                    `
-                                    : ""
-                            }
-
-
-                            ${
-                                evidence
-                                    ? `
-                                        <div class="professional-detail-block">
-
-                                            <span>
-                                                RISK REASON
-                                            </span>
-
-                                            <p>
-                                                ${escapeHtml(
-                                                    evidence
-                                                )}
-                                            </p>
-
-                                        </div>
-                                    `
-                                    : ""
-                            }
-
-                        </details>
-
-                    </article>
-
-                `;
-
-            }
-        ).join("");
-
-
-    /*
-     * --------------------------------------------------------
-     * POLICY COUNT
-     * --------------------------------------------------------
-     */
-
-    const policyCountElement =
-        document.getElementById(
-            "finalPolicyCount"
-        );
-
-
-    const policyCount =
-        policyCountElement
-            ? policyCountElement.textContent
-            : (
-                document.getElementById(
-                    "policyCount"
-                )?.textContent ||
-                "0"
-            );
-
-
-    /*
-     * --------------------------------------------------------
-     * FINAL VIEW
-     * --------------------------------------------------------
-     */
-
-    resultView.innerHTML = `
-
-        <div
-            class="professional-page-header"
-        >
-
-            <div>
-
-                <span
-                    class="professional-eyebrow"
-                >
-                    T&C ANALYZER
-                </span>
-
-                <h2>
-                    Terms & Conditions Risk
-                </h2>
-
-                <p>
-                    ${escapeHtml(
-                        policyCount
-                    )}
-                    policies analyzed
-                    ·
-                    ${escapeHtml(
-                        analyzedClauses
-                    )}
-                    risk findings
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div
-            class="professional-overall-card ${escapeHtml(riskClass)}"
-        >
-
-            <div>
-
-                <span>
-                    OVERALL RISK
-                </span>
-
-                <strong>
-                    ${escapeHtml(
-                        overallRisk
-                    )}
-                </strong>
-
-            </div>
-
-
-            <div
-                class="professional-overall-score"
-            >
-
-                <strong>
-                    ${escapeHtml(
-                        overallScore
-                    )}
-                </strong>
-
-                <span>
-                    /100
-                </span>
-
-            </div>
-
-        </div>
-
-
-        <div
-            class="professional-section-title"
-        >
-            Risk Findings
-        </div>
-
-
-        <div
-            class="professional-risk-list"
-        >
-
-            ${
-                findingsHtml ||
-                `
-                    <div
-                        class="professional-empty"
-                    >
-                        No risk findings were returned.
-                    </div>
-                `
-            }
-
-        </div>
-
-    `;
-
-
-    /*
-     * --------------------------------------------------------
-     * HIDE ALL OLD AGENT OUTPUT
-     * --------------------------------------------------------
-     *
-     * Agent 1 and Agent 2 continue running, but their
-     * intermediate results are not presented to users.
-     */
-
-    const hideIds = [
-
-        "agent1Status",
-        "agent2Status",
-
-        "termsCount",
-        "privacyCount",
-        "cookiesCount",
-        "legalCount",
-
-        "policyCount",
-        "policies",
-
-        "overallRisk",
-        "keyFindings",
-        "clauseCount",
-        "clauses",
-
-        "agent3Status",
-        "agent3OverallRisk",
-        "agent3OverallScore",
-        "agent3ClauseCount",
-        "agent3Warnings",
-        "agent3Analyses"
-
-    ];
-
-
-    for (
-        const id of hideIds
-    ) {
-
-        const element =
-            document.getElementById(id);
-
-        if (element) {
-
-            element.style.display =
-                "none";
-
-        }
-
-    }
-
-
-    /*
-     * Hide the old panels completely.
-     */
-
-    const panels =
-        document.querySelectorAll(
-            ".panel"
-        );
-
-
-    for (
-        const panel of panels
-    ) {
-
-        if (
-            panel !== resultView &&
-            !panel.contains(resultView)
-        ) {
-
-            panel.style.display =
-                "none";
-
-        }
-
-    }
-
-}
-
-/* ============================================================
- * HTML ESCAPING
- * ========================================================== */
-
-function escapeHtml(
-    value
-) {
-
-    return String(
-        value ?? ""
-    )
-        .replaceAll(
-            "&",
-            "&amp;"
-        )
-        .replaceAll(
-            "<",
-            "&lt;"
-        )
-        .replaceAll(
-            ">",
-            "&gt;"
-        )
-        .replaceAll(
-            '"',
-            "&quot;"
-        )
-        .replaceAll(
-            "'",
-            "&#039;"
-        );
-
-}
-
-
-/* ============================================================
- * RUN ANALYSIS
- * ========================================================== */
-
-async function run() {
-
-    /*
-     * HARD SINGLE-FLIGHT LOCK
-     *
-     * This prevents two Agent 1 requests from being
-     * created when the user clicks repeatedly.
-     */
-
-    if (
-        analysisRunning
-    ) {
-
-        console.warn(
-            "[T&C] Analysis already running. Ignoring duplicate request."
-        );
-
-        return;
-
-    }
-
-
-    setRunningState(
-        true
-    );
-
-
-    resetUI();
-
-
-    try {
-
-        /* ----------------------------------------------------
-         * STEP 1: SOURCE TAB
-         * -------------------------------------------------- */
-
-        const tab =
-            await getTab();
-
-
-        currentTabId =
-            tab.id;
-
-
-        currentTabUrl =
-            tab.url;
-
-
-        els.pageTitle.textContent =
-            tab.title ||
-            tab.url ||
-            "Current webpage";
-
-
-        console.log(
-            "[T&C] Source tab:",
-            {
-                id:
-                    tab.id,
-
-                url:
-                    tab.url,
-
-                title:
-                    tab.title
-            }
-        );
-
-
-        /* ----------------------------------------------------
-         * STEP 2: BACKEND
-         * -------------------------------------------------- */
-
-        if (
-            !(await health())
-        ) {
-
-            throw new Error(
-                "Start FastAPI on port 8001 first."
-            );
-
-        }
-
-
-        /* ----------------------------------------------------
-         * STEP 3: BROWSER COLLECTION
-         * -------------------------------------------------- */
-
-        els.agent1Status.textContent =
-            "Collecting browser data";
-
-
-        const browser =
-            await browserData(
-                currentTabId
-            );
-
-
-        console.log(
-            "[T&C] DATA FROM CHROME:",
-            {
-                policyLinks:
-                    Array.isArray(
-                        browser?.browser_links
-                    )
-                        ? browser.browser_links.length
-                        : 0,
-
-                documents:
-                    Array.isArray(
-                        browser?.browser_documents
-                    )
-                        ? browser.browser_documents.length
-                        : 0,
-
-                allLinks:
-                    Array.isArray(
-                        browser?.browser_all_links
-                    )
-                        ? browser.browser_all_links.length
-                        : 0,
-
-                pageText:
-                    String(
-                        browser?.browser_page_text ||
-                        ""
-                    ).length
-            }
-        );
-
-
-        /* ----------------------------------------------------
-         * STEP 4: AGENT 1
-         * -------------------------------------------------- */
-
-        els.agent1Status.textContent =
-            "Extracting policies";
-
-
-        const a1 =
-            await post(
-                "/api/agent1/analyze",
-                {
-
-                    url:
-                        currentTabUrl,
-
-                    browser_links:
-                        browser?.browser_links ||
-                        [],
-
-                    browser_documents:
-                        browser?.browser_documents ||
-                        [],
-
-                    browser_all_links:
-                        browser?.browser_all_links ||
-                        [],
-
-                    browser_page_text:
-                        browser?.browser_page_text ||
-                        "",
-
-                    browser_title:
-                        browser?.title ||
-                        tab.title ||
-                        ""
-
-                }
-            );
-
-
-        /*
-         * Ignore stale responses.
-         */
-
-        if (
-            !analysisRunning
-        ) {
-
             return;
-
         }
 
+        renderFinalAnalysis(agent3Result, collectedPolicies);
 
-        currentRunId =
-            a1?.run_id ||
-            null;
-
-
-        const agent1 =
-            a1?.agent1 ||
-            a1 ||
-            {};
-
-
-        const policies =
-            Array.isArray(
-                agent1.policy_pages
-            )
-                ? agent1.policy_pages
-                : [];
-
-
-        console.log(
-            "[T&C] AGENT 1 RESULT:",
-            {
-                runId:
-                    currentRunId,
-
-                policies:
-                    policies.length
-            }
+    } catch (err) {
+        showErrorState(
+            "Something went wrong",
+            "An unexpected error occurred. Please try again."
         );
-
-
-        renderPolicies(
-            policies
-        );
-
-
-        if (
-            policies.length === 0
-        ) {
-
-            els.agent1Status.textContent =
-                "No policies found";
-
-
-            els.agent2Status.textContent =
-                "Skipped";
-
-
-            els.overallRisk.textContent =
-                "UNAVAILABLE";
-
-
-            els.keyFindings.innerHTML =
-                "<li>No supported policy document could be extracted from this page.</li>";
-
-
-            return;
-
-        }
-
-
-        els.agent1Status.textContent =
-            "Complete";
-
-
-        /* ----------------------------------------------------
-         * STEP 5: AGENT 2
-         * -------------------------------------------------- */
-
-        if (
-            !currentRunId
-        ) {
-
-            throw new Error(
-                "Agent 1 completed without a run ID."
-            );
-
-        }
-
-
-        els.agent2Status.textContent =
-            "Analyzing";
-
-
-        els.overallRisk.textContent =
-            "ANALYZING";
-
-
-        const a2 =
-            await post(
-                "/api/agent2/analyze",
-                {
-                    run_id:
-                        currentRunId
-                }
-            );
-
-
-        if (
-            !analysisRunning
-        ) {
-
-            return;
-
-        }
-
-
-        renderAgent2(
-            a2?.agent2 ||
-            a2 ||
-            {}
-        );
-
-
-
-
-        /* ----------------------------------------------------
-         * STEP 6: AGENT 3
-         * -------------------------------------------------- */
-
-        ensureAgent3UI();
-
-
-        if (els.agent3Status) {
-
-            els.agent3Status.textContent =
-                "Analyzing";
-
-        }
-
-
-        console.log(
-            "[T&C] Starting Agent 3:",
-            {
-                runId:
-                    currentRunId
-            }
-        );
-
-
-        const a3 =
-            await post(
-                "/api/agent3/analyze",
-                {
-                    run_id:
-                        currentRunId
-                }
-            );
-
-
-        if (
-            !analysisRunning
-        ) {
-
-            return;
-
-        }
-
-
-        console.log(
-            "[T&C] AGENT 3 RESULT:",
-            a3
-        );
-
-
-        renderAgent3(
-            a3?.agent3 ||
-            a3 ||
-            {}
-        );
-
-
-    } catch (
-        error
-    ) {
-
-        console.error(
-            "[T&C] Analysis error:",
-            error
-        );
-
-
-        els.agent1Status.textContent =
-            "Error";
-
-
-        els.agent2Status.textContent =
-            "Stopped";
-
-
-        els.overallRisk.textContent =
-            "ERROR";
-
-
-        els.keyFindings.innerHTML =
-            `<li>${
-                escapeHtml(
-                    error?.message ||
-                    String(error)
-                )
-            }</li>`;
-
     } finally {
-
-        setRunningState(
-            false
-        );
-
+        analysisRunning = false;
+        if (btnAnalyze)   btnAnalyze.disabled   = false;
+        if (btnReanalyze) btnReanalyze.disabled = false;
     }
-
 }
 
+// ============================================================
+// EVENT DELEGATION: CLAUSE CARD TOGGLE
+// ============================================================
 
-/* ============================================================
- * BUTTON EVENTS
- * ========================================================== */
+if (clausePanel) {
+    clausePanel.addEventListener("click", e => {
+        const btn = e.target.closest(".clause-card-header");
+        if (!btn) return;
+        const cardId = btn.getAttribute("data-card");
+        if (cardId) toggleClause(cardId);
+    });
 
-els.analyze.addEventListener(
-    "click",
-    () => {
+    clausePanel.addEventListener("keydown", e => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const btn = e.target.closest(".clause-card-header");
+        if (!btn) return;
+        e.preventDefault();
+        const cardId = btn.getAttribute("data-card");
+        if (cardId) toggleClause(cardId);
+    });
+}
 
-        run();
+// ============================================================
+// EVENT: RISK TABS
+// ============================================================
 
-    }
-);
+if (tabHigh)   tabHigh.addEventListener("click",   () => switchRiskTab("high"));
+if (tabMedium) tabMedium.addEventListener("click", () => switchRiskTab("medium"));
+if (tabLow)    tabLow.addEventListener("click",    () => switchRiskTab("low"));
 
+// ============================================================
+// EVENT: BUTTONS
+// ============================================================
 
-els.reanalyze.addEventListener(
-    "click",
-    () => {
+if (btnAnalyze) {
+    btnAnalyze.addEventListener("click", () => runAnalysis());
+}
 
-        if (
-            analysisRunning
-        ) {
+if (btnReanalyze) {
+    btnReanalyze.addEventListener("click", () => {
+        if (!analysisRunning) runAnalysis();
+    });
+}
 
-            return;
+if (btnRetry) {
+    btnRetry.addEventListener("click", () => {
+        if (!analysisRunning) runAnalysis();
+    });
+}
 
-        }
-
-        run();
-
-    }
-);
-
-
-/* ============================================================
- * INITIAL POPUP STATE
- *
- * IMPORTANT:
- * We DO NOT automatically run analysis here.
- *
- * The user must explicitly click Run Analysis.
- * This prevents duplicate Agent 1 requests.
- * ========================================================== */
+// ============================================================
+// INITIALIZATION
+// ============================================================
 
 (async () => {
-
     try {
-
-        const tab =
-            await getTab();
-
-
-        currentTabId =
-            tab.id;
-
-
-        currentTabUrl =
-            tab.url;
-
-
-        els.pageTitle.textContent =
-            tab.title ||
-            tab.url ||
-            "Current webpage";
-
-
-        await health();
-
-
-        els.agent1Status.textContent =
-            "Ready";
-
-
-        els.agent2Status.textContent =
-            "Ready";
-
-
-        els.overallRisk.textContent =
-            "READY";
-
-
-        els.keyFindings.innerHTML =
-            "<li>Click Run Analysis to scan this webpage.</li>";
-
-
-    } catch (
-        error
-    ) {
-
-        console.error(
-            "[T&C] Popup initialization error:",
-            error
-        );
-
-
-        els.connectionStatus.textContent =
-            "Unable to access page";
-
-
-        els.agent1Status.textContent =
-            "Unavailable";
-
-
-        els.agent2Status.textContent =
-            "Stopped";
-
-
-        els.overallRisk.textContent =
-            "UNAVAILABLE";
-
-
-        els.keyFindings.innerHTML =
-            `<li>${
-                escapeHtml(
-                    error?.message ||
-                    String(error)
-                )
-            }</li>`;
-
+        const tab = await getActiveTab();
+        currentTabId  = tab.id;
+        currentTabUrl = tab.url;
+        renderIdleState(tab);
+    } catch (err) {
+        // Tab not accessible (e.g., chrome:// page)
+        if (idlePageInfo) idlePageInfo.textContent = "";
+        if (idleError) {
+            idleError.textContent = err?.message || "Unable to access this page.";
+            idleError.hidden = false;
+        }
+        if (btnAnalyze) btnAnalyze.disabled = true;
+        showState("idle");
     }
-
 })();
