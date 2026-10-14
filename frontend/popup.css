@@ -393,82 +393,188 @@ button:disabled {
   z-index: 10;
 }
 
-/* Overall risk card */
+/* Overall risk card / Speedometer dashboard */
 .risk-card {
-  margin: 12px 14px 10px;
-  background: #fff;
-  border: 1px solid #e4e8ef;
-  border-radius: 14px;
-  padding: 16px 18px 12px;
+  margin: 14px 14px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.risk-card-label {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
-  color: #8496ab;
-  text-transform: uppercase;
-  margin-bottom: 10px;
+.score-card-header {
+  text-align: center;
+  margin-bottom: 2px;
 }
 
-.risk-card-body {
+.score-card-heading {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.2px;
+}
+
+/* Speedometer container & SVG */
+.speedometer-container {
   display: flex;
+  justify-content: center;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  width: 100%;
+  max-width: 260px;
+  margin: 4px auto 0;
+  position: relative;
 }
 
-.risk-level-badge {
-  display: inline-flex;
+.speedometer-svg {
+  width: 100%;
+  height: auto;
+  max-width: 260px;
+  display: block;
+  overflow: visible;
+}
+
+/* Gauge tracks */
+.gauge-track-outer,
+.gauge-track-inner {
+  stroke: #e2e8f0;
+  stroke-linecap: round;
+}
+
+.gauge-arc-gradient {
+  stroke-linecap: round;
+}
+
+/* Gauge ticks & labels */
+.gauge-tick-major {
+  stroke: #94a3b8;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.gauge-tick-minor {
+  stroke: #cbd5e1;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.gauge-scale-label {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #64748b;
+  font-family: inherit;
+  user-select: none;
+}
+
+/* Needle */
+.gauge-needle-group {
+  will-change: transform;
+}
+
+.gauge-needle-blade {
+  fill: #0f766e;
+  filter: drop-shadow(0px 2px 3px rgba(15, 23, 42, 0.25));
+}
+
+/* Stationary Center Hub */
+.gauge-hub-outer {
+  fill: #0d9488;
+}
+
+.gauge-hub-core {
+  fill: #134e4a;
+}
+
+.gauge-hub-pin {
+  fill: #f8fafc;
+}
+
+/* Score readout */
+.score-readout-center {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  font-size: 18px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  line-height: 1;
-}
-
-/* Risk level colors via attribute */
-.risk-level-badge[data-level="HIGH"],
-.risk-level-badge[data-level="CRITICAL"] {
-  color: #b91c1c;
-}
-
-.risk-level-badge[data-level="MEDIUM"] {
-  color: #b45309;
-}
-
-.risk-level-badge[data-level="LOW"] {
-  color: #15803d;
-}
-
-.risk-level-badge:not([data-level]) {
-  color: #4a5568;
+  justify-content: center;
+  margin-top: 4px;
+  text-align: center;
 }
 
 .risk-score-block {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  justify-content: center;
+  gap: 3px;
 }
 
 .risk-score-number {
-  font-size: 32px;
-  font-weight: 900;
+  font-size: 40px;
+  font-weight: 800;
   line-height: 1;
-  color: #18243a;
+  color: #0f172a;
+  letter-spacing: -1.2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .risk-score-denom {
-  font-size: 13px;
-  color: #8496ab;
+  font-size: 15px;
+  color: #64748b;
   font-weight: 600;
+  margin-left: 2px;
 }
 
-.risk-card-sub {
-  font-size: 11px;
-  color: #8496ab;
-  margin-top: 6px;
-  font-weight: 500;
+.risk-status-badge-wrap {
+  margin-top: 8px;
+}
+
+.risk-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 16px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  line-height: 1.3;
+  text-transform: uppercase;
+  transition: all 0.25s ease;
+}
+
+/* Risk level / score status badge colors */
+.risk-level-badge[data-level="GOOD"],
+.risk-level-badge[data-level="LOW"] {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.risk-level-badge[data-level="MODERATE"],
+.risk-level-badge[data-level="MEDIUM"] {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.risk-level-badge[data-level="HIGH RISK"],
+.risk-level-badge[data-level="HIGH"],
+.risk-level-badge[data-level="CRITICAL"] {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.risk-level-badge:not([data-level]) {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .gauge-needle-group {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* ---- Clause summary ---- */

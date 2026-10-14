@@ -39,55 +39,58 @@ let clausesByRisk = { high: [], medium: [], low: [] };
 // DOM ELEMENTS
 // ============================================================
 
+const $id = id => (typeof document !== "undefined" ? document.getElementById(id) : null);
+
 const states = {
-    idle:       document.getElementById("state-idle"),
-    extracting: document.getElementById("state-extracting"),
-    extracted:  document.getElementById("state-extracted"),
-    analyzing:  document.getElementById("state-analyzing"),
-    result:     document.getElementById("state-result"),
-    error:      document.getElementById("state-error"),
+    idle:       $id("state-idle"),
+    extracting: $id("state-extracting"),
+    extracted:  $id("state-extracted"),
+    analyzing:  $id("state-analyzing"),
+    result:     $id("state-result"),
+    error:      $id("state-error"),
 };
 
-const btnAnalyze   = document.getElementById("btn-analyze");
-const btnReanalyze = document.getElementById("btn-reanalyze");
-const btnRetry     = document.getElementById("btn-retry");
+const btnAnalyze   = $id("btn-analyze");
+const btnReanalyze = $id("btn-reanalyze");
+const btnRetry     = $id("btn-retry");
 
 // Extraction steps
-const stepScrape  = document.getElementById("step-scrape");
-const stepDetect  = document.getElementById("step-detect");
-const stepExtract = document.getElementById("step-extract");
+const stepScrape  = $id("step-scrape");
+const stepDetect  = $id("step-detect");
+const stepExtract = $id("step-extract");
 
 // Extraction summary
-const docSummary = document.getElementById("doc-summary");
+const docSummary = $id("doc-summary");
 
 // Analysis steps
-const stepClauses = document.getElementById("step-clauses");
-const stepRisk    = document.getElementById("step-risk");
-const stepExplain = document.getElementById("step-explain");
+const stepClauses = $id("step-clauses");
+const stepRisk    = $id("step-risk");
+const stepExplain = $id("step-explain");
 
 // Result elements
-const resultRiskLevel    = document.getElementById("result-risk-level");
-const resultRiskScore    = document.getElementById("result-risk-score");
-const countHigh          = document.getElementById("count-high");
-const countMedium        = document.getElementById("count-medium");
-const countLow           = document.getElementById("count-low");
-const tabHigh            = document.getElementById("tab-high");
-const tabMedium          = document.getElementById("tab-medium");
-const tabLow             = document.getElementById("tab-low");
-const tabCountHigh       = document.getElementById("tab-count-high");
-const tabCountMedium     = document.getElementById("tab-count-medium");
-const tabCountLow        = document.getElementById("tab-count-low");
-const clauseCategoryHeading = document.getElementById("clause-category-heading");
-const clausePanel        = document.getElementById("clause-panel");
-const resultDocContext   = document.getElementById("result-doc-context");
+const resultRiskLevel    = $id("result-risk-level");
+const resultRiskScore    = $id("result-risk-score");
+const gaugeNeedleGroup   = $id("gauge-needle-group");
+const countHigh          = $id("count-high");
+const countMedium        = $id("count-medium");
+const countLow           = $id("count-low");
+const tabHigh            = $id("tab-high");
+const tabMedium          = $id("tab-medium");
+const tabLow             = $id("tab-low");
+const tabCountHigh       = $id("tab-count-high");
+const tabCountMedium     = $id("tab-count-medium");
+const tabCountLow        = $id("tab-count-low");
+const clauseCategoryHeading = $id("clause-category-heading");
+const clausePanel        = $id("clause-panel");
+const resultDocContext   = $id("result-doc-context");
 
 // Idle page info / error
-const idlePageInfo = document.getElementById("idle-page-info");
-const idleError    = document.getElementById("idle-error");
+const idlePageInfo = $id("idle-page-info");
+const idleError    = $id("idle-error");
 
 // Error state
-const errorTitle = document.getElementById("error-title");
-const errorDesc  = document.getElementById("error-desc");
+const errorTitle = $id("error-title");
+const errorDesc  = $id("error-desc");
 
 // ============================================================
 // STATE MACHINE
@@ -341,6 +344,189 @@ function renderExtractionSummary(policies) {
 }
 
 // ============================================================
+// SPEEDOMETER GAUGE
+// ============================================================
+
+// Fixed gauge center coordinates in SVG coordinate system
+const GAUGE_CX = 130;
+const GAUGE_CY = 140;
+
+let gaugeAnimationId      = null;
+let lastAnimatedScore     = null;
+let lastAnimatedRiskLevel = null;
+
+/**
+ * Maps a score in the range [0, 100] to an angle in degrees [-90, +90].
+ * Math: angle = -90 + (clampedScore / 100) * 180
+ * - Score 0   => -90 deg (needle points horizontally left to 0)
+ * - Score 25  => -45 deg (needle points to lower-left at 25)
+ * - Score 50  =>   0 deg (needle points vertically top at 50)
+ * - Score 75  => +45 deg (needle points to upper-right at 75)
+ * - Score 100 => +90 deg (needle points horizontally right to 100)
+ */
+function calculateGaugeAngle(score) {
+    if (!Number.isFinite(Number(score))) return -90;
+    const clamped = Math.max(0, Math.min(100, Number(score)));
+    const angle   = -90 + (clamped / 100) * 180;
+    return Math.round(angle * 10000) / 10000;
+}
+
+/**
+ * Computes score classification label based on application scoring semantics.
+ * - Score < 45 / LOW: "GOOD"
+ * - Score 45-80 / MEDIUM: "MODERATE"
+ * - Score > 80 / HIGH: "HIGH RISK"
+ */
+function getScoreStatusLabel(level, score) {
+    const norm = normalizeRiskLevel(level);
+    const num = Number(score);
+    if (norm === "HIGH" || norm === "CRITICAL" || (Number.isFinite(num) && num > 80)) {
+        return "HIGH RISK";
+    }
+    if (norm === "MEDIUM" || (Number.isFinite(num) && num >= 45)) {
+        return "MODERATE";
+    }
+    return "GOOD";
+}
+
+/**
+ * Sets gauge needle and score readout instantly without animation.
+ */
+function setGaugeInstant(score, level) {
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(Number(score)) ? Number(score) : 0));
+    const angle   = calculateGaugeAngle(clamped);
+    const status  = getScoreStatusLabel(level, clamped);
+
+    if (gaugeNeedleGroup) {
+        gaugeNeedleGroup.setAttribute("transform", `translate(${GAUGE_CX}, ${GAUGE_CY}) rotate(${angle})`);
+    }
+    if (resultRiskScore) {
+        resultRiskScore.textContent = String(Math.round(clamped));
+    }
+    if (resultRiskLevel) {
+        resultRiskLevel.textContent = status;
+        resultRiskLevel.setAttribute("data-level", status);
+    }
+}
+
+/**
+ * Smoothly animates the needle and score counter from 0 to the actual score over 1.4 seconds.
+ * Uses ease-out cubic deceleration for natural, stable movement.
+ * Respects prefers-reduced-motion accessibility preference.
+ */
+function animateGauge(targetScore, level) {
+    if (gaugeAnimationId) {
+        cancelAnimationFrame(gaugeAnimationId);
+        gaugeAnimationId = null;
+    }
+
+    const clampedTarget = Math.max(0, Math.min(100, Number.isFinite(Number(targetScore)) ? Math.round(Number(targetScore)) : 0));
+
+    // Prevent repeated animations on unrelated rerenders with the same score
+    if (lastAnimatedScore === clampedTarget && lastAnimatedRiskLevel === level) {
+        setGaugeInstant(clampedTarget, level);
+        return;
+    }
+
+    lastAnimatedScore = clampedTarget;
+    lastAnimatedRiskLevel = level;
+
+    // Check prefers-reduced-motion
+    const prefersReducedMotion = typeof window !== "undefined" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+        setGaugeInstant(clampedTarget, level);
+        return;
+    }
+
+    const duration   = 1400; // 1.4s smooth easing
+    const startTime  = (typeof performance !== "undefined" && performance.now)
+        ? performance.now()
+        : Date.now();
+    const startScore = 0;
+
+    function step(now) {
+        const elapsed  = now - startTime;
+        const progress = Math.min(1, Math.max(0, elapsed / duration));
+        // Ease-out cubic: 1 - (1 - t)^3
+        const ease     = 1 - Math.pow(1 - progress, 3);
+        const current  = startScore + (clampedTarget - startScore) * ease;
+        const angle    = calculateGaugeAngle(current);
+
+        if (gaugeNeedleGroup) {
+            gaugeNeedleGroup.setAttribute("transform", `translate(${GAUGE_CX}, ${GAUGE_CY}) rotate(${angle})`);
+        }
+        if (resultRiskScore) {
+            resultRiskScore.textContent = String(Math.round(current));
+        }
+
+        if (progress < 1) {
+            gaugeAnimationId = requestAnimationFrame(step);
+        } else {
+            setGaugeInstant(clampedTarget, level);
+            gaugeAnimationId = null;
+        }
+    }
+
+    gaugeAnimationId = requestAnimationFrame(step);
+}
+
+/**
+ * Extracts category score details for Content, Section, ATS Essentials, and Tailoring
+ * from the API response without inventing scores or altering backend calculations.
+ * Returns null for any category that is unavailable.
+ */
+function extractCategoryScores(data) {
+    const definitions = [
+        { id: "content", label: "Content", keys: ["content", "Content", "content_score", "contentScore"] },
+        { id: "section", label: "Section", keys: ["section", "Section", "section_score", "sectionScore"] },
+        { id: "ats_essentials", label: "ATS Essentials", keys: ["ats_essentials", "atsEssentials", "ATS Essentials", "ats", "ats_score", "atsScore"] },
+        { id: "tailoring", label: "Tailoring", keys: ["tailoring", "Tailoring", "tailoring_score", "tailoringScore"] }
+    ];
+
+    const searchSources = [
+        data?.category_scores,
+        data?.categories,
+        data?.category_breakdown,
+        data?.scores,
+        data
+    ].filter(Boolean);
+
+    return definitions.map(def => {
+        let foundScore = null;
+
+        for (const src of searchSources) {
+            if (Array.isArray(src)) {
+                const item = src.find(i => {
+                    const name = String(i?.name || i?.category || i?.label || "").toLowerCase().trim();
+                    return def.keys.some(k => k.toLowerCase() === name);
+                });
+                if (item && Number.isFinite(Number(item.score ?? item.value))) {
+                    foundScore = Math.max(0, Math.min(100, Math.round(Number(item.score ?? item.value))));
+                    break;
+                }
+            } else if (typeof src === "object") {
+                for (const k of def.keys) {
+                    if (k in src && Number.isFinite(Number(src[k]))) {
+                        foundScore = Math.max(0, Math.min(100, Math.round(Number(src[k]))));
+                        break;
+                    }
+                }
+                if (foundScore !== null) break;
+            }
+        }
+
+        return {
+            id: def.id,
+            label: def.label,
+            score: foundScore
+        };
+    });
+}
+
+// ============================================================
 // RENDER: OVERALL RISK CARD
 // ============================================================
 
@@ -348,14 +534,16 @@ function renderRiskCard(overallRisk, overallScore) {
     if (!resultRiskLevel || !resultRiskScore) return;
 
     const level = normalizeRiskLevel(overallRisk);
-
-    resultRiskLevel.textContent = level;
-    resultRiskLevel.setAttribute("data-level", level);
-
     const score = Number.isFinite(Number(overallScore))
         ? Math.max(0, Math.min(100, Math.round(Number(overallScore))))
         : 0;
-    resultRiskScore.textContent = String(score);
+
+    const statusLabel = getScoreStatusLabel(level, score);
+    resultRiskLevel.textContent = statusLabel;
+    resultRiskLevel.setAttribute("data-level", statusLabel);
+
+    // Animate speedometer needle & numeric counter
+    animateGauge(score, level);
 }
 
 // ============================================================
@@ -740,7 +928,7 @@ function renderFinalAnalysis(agent3Result, policies) {
     const counts  = countRiskLevels(analyses);
 
     // Render risk card
-    renderRiskCard(overallRisk, overallScore);
+    renderRiskCard(overallRisk, overallScore, agent3Result);
 
     // Render summary counts
     renderClauseCounts(counts);
@@ -818,6 +1006,8 @@ function showErrorState(title, desc) {
 async function runAnalysis() {
     if (analysisRunning) return;
     analysisRunning = true;
+    lastAnimatedScore = null;
+    lastAnimatedRiskLevel = null;
 
     // Disable buttons
     if (btnAnalyze)   btnAnalyze.disabled   = true;
@@ -1063,20 +1253,40 @@ if (btnRetry) {
 // INITIALIZATION
 // ============================================================
 
-(async () => {
-    try {
-        const tab = await getActiveTab();
-        currentTabId  = tab.id;
-        currentTabUrl = tab.url;
-        renderIdleState(tab);
-    } catch (err) {
-        // Tab not accessible (e.g., chrome:// page)
-        if (idlePageInfo) idlePageInfo.textContent = "";
-        if (idleError) {
-            idleError.textContent = err?.message || "Unable to access this page.";
-            idleError.hidden = false;
+// Guarded initialization (runs when loaded in Chrome extension environment)
+if (typeof chrome !== "undefined" && chrome?.tabs) {
+    (async () => {
+        try {
+            const tab = await getActiveTab();
+            currentTabId  = tab.id;
+            currentTabUrl = tab.url;
+            renderIdleState(tab);
+        } catch (err) {
+            // Tab not accessible (e.g., chrome:// page)
+            if (idlePageInfo) idlePageInfo.textContent = "";
+            if (idleError) {
+                idleError.textContent = err?.message || "Unable to access this page.";
+                idleError.hidden = false;
+            }
+            if (btnAnalyze) btnAnalyze.disabled = true;
+            showState("idle");
         }
-        if (btnAnalyze) btnAnalyze.disabled = true;
-        showState("idle");
-    }
-})();
+    })();
+}
+
+// ============================================================
+// EXPORTS FOR TESTING (NODE ENVIRONMENT)
+// ============================================================
+
+if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+        calculateGaugeAngle,
+        getScoreStatusLabel,
+        GAUGE_CX,
+        GAUGE_CY,
+        extractCategoryScores,
+        normalizeRiskLevel,
+        normalizeDocType,
+        countRiskLevels,
+    };
+}

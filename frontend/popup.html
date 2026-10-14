@@ -160,17 +160,80 @@
         </button>
       </div>
 
-      <!-- Overall risk card -->
-      <div id="risk-card" class="risk-card" aria-label="Overall risk">
-        <div class="risk-card-label">Risk Analysis</div>
-        <div class="risk-card-body">
-          <span id="result-risk-level" class="risk-level-badge" aria-label="Risk level"></span>
+      <!-- Overall score card with animated speedometer -->
+      <div id="risk-card" class="risk-card score-dashboard-card" aria-label="Overall score">
+        <div class="score-card-header">
+          <h2 class="score-card-heading">Your Score</h2>
+        </div>
+
+        <!-- Semicircular Speedometer Gauge -->
+        <div class="speedometer-container" aria-hidden="true">
+          <svg class="speedometer-svg" viewBox="0 0 260 160" role="img" aria-label="Score speedometer gauge">
+            <defs>
+              <!-- Multicolor arc: red through orange and yellow to green -->
+              <linearGradient id="speedometer-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ef4444" />
+                <stop offset="25%" stop-color="#f97316" />
+                <stop offset="50%" stop-color="#eab308" />
+                <stop offset="75%" stop-color="#84cc16" />
+                <stop offset="100%" stop-color="#10b981" />
+              </linearGradient>
+            </defs>
+
+            <!-- Subtle outer track -->
+            <path class="gauge-track-outer" d="M 31 140 A 99 99 0 0 1 229 140" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
+
+            <!-- Smooth multicolor arc (R = 90, width = 14) -->
+            <path class="gauge-arc-gradient" d="M 40 140 A 90 90 0 0 1 220 140" fill="none" stroke="url(#speedometer-gradient)" stroke-width="14" stroke-linecap="round" />
+
+            <!-- Subtle inner track -->
+            <path class="gauge-track-inner" d="M 49 140 A 81 81 0 0 1 211 140" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
+
+            <!-- Tick marks (major: 0, 25, 50, 75, 100) -->
+            <line x1="29" y1="140" x2="23" y2="140" class="gauge-tick gauge-tick-major" />
+            <line x1="58.58" y1="68.58" x2="54.34" y2="64.34" class="gauge-tick gauge-tick-major" />
+            <line x1="130" y1="39" x2="130" y2="33" class="gauge-tick gauge-tick-major" />
+            <line x1="201.42" y1="68.58" x2="205.66" y2="64.34" class="gauge-tick gauge-tick-major" />
+            <line x1="231" y1="140" x2="237" y2="140" class="gauge-tick gauge-tick-major" />
+
+            <!-- Minor ticks -->
+            <line x1="36.69" y1="101.35" x2="32.99" y2="99.82" class="gauge-tick gauge-tick-minor" />
+            <line x1="91.35" y1="46.69" x2="89.82" y2="42.99" class="gauge-tick gauge-tick-minor" />
+            <line x1="168.65" y1="46.69" x2="170.18" y2="42.99" class="gauge-tick gauge-tick-minor" />
+            <line x1="223.31" y1="101.35" x2="227.01" y2="99.82" class="gauge-tick gauge-tick-minor" />
+
+            <!-- Scale labels -->
+            <text x="13" y="144" class="gauge-scale-label" text-anchor="middle">0</text>
+            <text x="46" y="57" class="gauge-scale-label" text-anchor="middle">25</text>
+            <text x="130" y="22" class="gauge-scale-label" text-anchor="middle">50</text>
+            <text x="214" y="57" class="gauge-scale-label" text-anchor="middle">75</text>
+            <text x="247" y="144" class="gauge-scale-label" text-anchor="middle">100</text>
+
+            <!-- Rotating Needle Group pivoted at fixed center (130, 140) -->
+            <g id="gauge-needle-group" class="gauge-needle-group" transform="translate(130, 140) rotate(-90)">
+              <!-- Sharp, tapered teal needle: tip at (0, -80), base width 7 centered at local pivot (0, 0) -->
+              <path d="M -3.5 6 L -0.8 -80 A 0.8 0.8 0 0 1 0.8 -80 L 3.5 6 Z" class="gauge-needle-blade" fill="#0f766e" />
+            </g>
+
+            <!-- Stationary Center Hub precisely at gauge pivot (130, 140) -->
+            <g class="gauge-center-hub" aria-hidden="true">
+              <circle cx="130" cy="140" r="11" class="gauge-hub-outer" fill="#0d9488" />
+              <circle cx="130" cy="140" r="8" class="gauge-hub-core" fill="#134e4a" />
+              <circle cx="130" cy="140" r="3.5" class="gauge-hub-pin" fill="#f8fafc" />
+            </g>
+          </svg>
+        </div>
+
+        <!-- Prominently displayed score beneath gauge -->
+        <div class="score-readout-center">
           <div class="risk-score-block">
-            <span id="result-risk-score" class="risk-score-number" aria-label="Risk score"></span>
+            <span id="result-risk-score" class="risk-score-number" aria-label="Score">0</span>
             <span class="risk-score-denom">/&nbsp;100</span>
           </div>
+          <div class="risk-status-badge-wrap">
+            <span id="result-risk-level" class="risk-level-badge" aria-label="Score classification" data-level="GOOD">GOOD</span>
+          </div>
         </div>
-        <div class="risk-card-sub">Overall Risk</div>
       </div>
 
       <!-- Clause counts summary -->
